@@ -3,14 +3,27 @@
 //  Google Apps Script + Firebase Firestore
 // ============================================================
 
-var CONFIG = {
-  // -- Firebase (Service Account) --
-  FIREBASE_PROJECT_ID:  'TU_PROJECT_ID',        // <- Cambia esto
-  FIREBASE_CLIENT_EMAIL:'TU_CLIENT_EMAIL',       // <- Cambia esto
-  FIREBASE_PRIVATE_KEY: 'TU_PRIVATE_KEY',        // <- Cambia esto
+// ============================================================
+//  SECRETOS - Propiedades del script (NUNCA en el codigo fuente)
+// ============================================================
+// FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY y
+// USERS_SPREADSHEET_ID son credenciales/identificadores privados y NO se
+// guardan aqui. Configuralos en:
+//   Extensiones > Apps Script > (icono engranaje) Configuracion del proyecto
+//   > Propiedades del script > Agregar propiedad de script
+// con esos 4 nombres exactos. getScriptProperty_() los lee desde ahi en
+// tiempo de ejecucion, para que nunca queden guardados en Code.gs ni se
+// suban por accidente a un repositorio de git.
+function getScriptProperty_(key) {
+  var value = PropertiesService.getScriptProperties().getProperty(key);
+  if (!value) {
+    throw new Error('Falta configurar la propiedad de script "' + key + '". Ve a Extensiones > Apps Script > Configuracion del proyecto > Propiedades del script.');
+  }
+  return value;
+}
 
+var CONFIG = {
   // -- Google Sheets (Usuarios) --
-  USERS_SPREADSHEET_ID: 'TU_SPREADSHEET_ID',     // <- Cambia esto
   USERS_SHEET_NAME:     'Usuarios',
   ADMIN_EMAIL:          'ccortes@ingenieroelm.com',
 
@@ -53,7 +66,7 @@ function doGet() {
 //  GOOGLE SHEETS - Usuarios (Autenticacion)
 // ============================================================
 function getUsersSheet_() {
-  var ss = SpreadsheetApp.openById(CONFIG.USERS_SPREADSHEET_ID);
+  var ss = SpreadsheetApp.openById(getScriptProperty_('USERS_SPREADSHEET_ID'));
   var sheet = ss.getSheetByName(CONFIG.USERS_SHEET_NAME);
   if (!sheet) {
     sheet = setupUsuariosSheet();
@@ -63,7 +76,7 @@ function getUsersSheet_() {
 }
 
 function setupUsuariosSheet() {
-  var ss = SpreadsheetApp.openById(CONFIG.USERS_SPREADSHEET_ID);
+  var ss = SpreadsheetApp.openById(getScriptProperty_('USERS_SPREADSHEET_ID'));
 
   var existing = ss.getSheetByName(CONFIG.USERS_SHEET_NAME);
   if (existing) {
@@ -1018,8 +1031,8 @@ function resetearDemo() {
 function getFirestoreService_() {
   return OAuth2.createService('Firestore')
     .setTokenUrl('https://oauth2.googleapis.com/token')
-    .setPrivateKey(CONFIG.FIREBASE_PRIVATE_KEY)
-    .setIssuer(CONFIG.FIREBASE_CLIENT_EMAIL)
+    .setPrivateKey(getScriptProperty_('FIREBASE_PRIVATE_KEY'))
+    .setIssuer(getScriptProperty_('FIREBASE_CLIENT_EMAIL'))
     .setPropertyStore(PropertiesService.getScriptProperties())
     .setScope('https://www.googleapis.com/auth/datastore');
 }
@@ -1028,7 +1041,7 @@ function firestoreRequest_(method, path, payload) {
   var service = getFirestoreService_();
   if (!service.hasAccess()) throw new Error('No se pudo autenticar con Firebase: ' + service.getLastError());
 
-  var url     = 'https://firestore.googleapis.com/v1/projects/' + CONFIG.FIREBASE_PROJECT_ID + '/databases/(default)/documents' + path;
+  var url     = 'https://firestore.googleapis.com/v1/projects/' + getScriptProperty_('FIREBASE_PROJECT_ID') + '/databases/(default)/documents' + path;
   var options = {
     method: method,
     headers: { 'Authorization': 'Bearer ' + service.getAccessToken(), 'Content-Type': 'application/json' },

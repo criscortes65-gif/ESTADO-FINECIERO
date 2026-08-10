@@ -73,11 +73,18 @@ Al abrir la aplicacion aparece primero una pantalla de inicio con dos opciones:
 1. **Crear proyecto en Google Apps Script.** Ir a [script.google.com](https://script.google.com) y crear un nuevo proyecto.
 2. **Crear proyecto en Firebase.** Ir a [console.firebase.google.com](https://console.firebase.google.com), crear un proyecto y activar Firestore Database.
 3. **Generar credenciales.** En Firebase: *Configuracion del proyecto > Cuentas de servicio > Generar nueva clave privada*. Se descarga un archivo JSON.
-4. **Configurar `Code.gs`.** Copiar el codigo de `Code.gs` y completar los datos del `CONFIG` con: `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` (del JSON), `USERS_SPREADSHEET_ID` y `ADMIN_EMAIL`.
-5. **Agregar libreria OAuth2.** En el editor: *Bibliotecas > agregar el ID* `1B7FSrk5Zi6L1rSxxTDgDEUsPzlukDsi4KGuTMorsTQHhGBzBkMun4iDF`.
-6. **Crear `Index.html`.** Crear un archivo HTML llamado `Index` y pegar el codigo de `Index.html`.
-7. **Desplegar como Web App.** *Implementar > Nueva implementacion > Aplicacion web*. Configurar acceso y copiar la URL.
-8. **Inicializar.** Abrir la URL y presionar el boton de configuracion para inicializar la hoja de usuarios.
+4. **Copiar `Code.gs`.** Pegar el codigo de `Code.gs` en el editor. El `ADMIN_EMAIL` dentro de `CONFIG` se puede editar directamente; el resto de las credenciales **no van en este archivo** (ver paso siguiente).
+5. **Configurar las credenciales como Propiedades del script (NO en el codigo).** En el editor: *Configuracion del proyecto (icono de engranaje) > Propiedades del script > Agregar propiedad de script*, y agregar estas 4, exactamente con estos nombres:
+   - `FIREBASE_PROJECT_ID`
+   - `FIREBASE_CLIENT_EMAIL`
+   - `FIREBASE_PRIVATE_KEY` (el valor `private_key` completo del JSON descargado en el paso 3, incluyendo `-----BEGIN PRIVATE KEY-----` y los `\n`)
+   - `USERS_SPREADSHEET_ID`
+
+   Guardarlas asi (en vez de pegarlas en `Code.gs`) evita que la clave privada quede en el codigo fuente y termine subida a un repositorio de git por accidente. Si alguna vez pegaste una clave privada real en un chat, un documento o un commit, considerala expuesta: genera una nueva en Firebase y borra la anterior.
+6. **Agregar libreria OAuth2.** En el editor: *Bibliotecas > agregar el ID* `1B7FSrk5Zi6L1rSxxTDgDEUsPzlukDsi4KGuTMorsTQHhGBzBkMun4iDF`.
+7. **Crear `Index.html`.** Crear un archivo HTML llamado `Index` y pegar el codigo de `Index.html`.
+8. **Desplegar como Web App.** *Implementar > Nueva implementacion > Aplicacion web*. Configurar acceso y copiar la URL.
+9. **Inicializar.** Abrir la URL y presionar el boton de configuracion para inicializar la hoja de usuarios.
 
 ## Estructura del Proyecto
 
