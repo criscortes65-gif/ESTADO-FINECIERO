@@ -123,16 +123,45 @@
   /* COBROS */
   .cobro-card{border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px}
   .cobro-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  /* LANDING / DEMO */
+  .landing{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .landing-box{max-width:440px;width:100%;text-align:center}
+  .landing-logo{font-size:40px;margin-bottom:8px}
+  .landing-title{font-size:22px;color:var(--cyan);font-weight:700;margin-bottom:6px}
+  .landing-sub{color:var(--text2);font-size:13px;margin-bottom:28px}
+  .landing-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:24px;text-align:left}
+  .landing-btn{width:100%;padding:14px;font-size:14px}
+  .landing-hint{color:var(--text2);font-size:11px;margin:10px 0 0}
+  .demo-badge{display:none;background:var(--gold);color:var(--bg);font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;align-items:center}
+  .demo-action-btn{display:none;width:auto;padding:0 10px;border-radius:6px;font-size:11px}
   @media(max-width:768px){.hdr{padding:12px 16px}.tabs{padding:12px 16px}.main{padding:16px}.form-grid{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}.accounts-grid{grid-template-columns:1fr}}
   @media print{body>*{display:none!important}body>.mo.open{display:flex!important}.mo{position:static!important;background:transparent!important}.md{max-width:100%!important;max-height:none!important;box-shadow:none!important}.mh .close,.mf{display:none!important}}
   </style>
 </head>
 <body>
-  <div class="app">
+  <div id="landing" class="landing">
+    <div class="landing-box">
+      <div class="landing-logo">💰</div>
+      <div class="landing-title">Gestion Financiero</div>
+      <p class="landing-sub">Controla tus cuentas, gastos y presupuesto en cada cobro.</p>
+      <div class="landing-card">
+        <button class="btn bp landing-btn" id="landing-demo-btn" onclick="entrarDemo()">🚀 Ver Demo (sin registrarte)</button>
+        <p class="landing-hint">Datos de ejemplo compartidos, solo para explorar la aplicacion. No es tu informacion real.</p>
+        <div style="height:14px"></div>
+        <button class="btn bs landing-btn" id="landing-real-btn" onclick="entrarReal()">Entrar con mi cuenta</button>
+        <p class="landing-hint">Cada cuenta ve unicamente su propia informacion, nunca la de otro usuario.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="app" id="app-root" style="display:none">
     <header class="hdr">
       <h1>Gestion Financiero</h1>
       <div class="hdr-right">
-        <button class="theme-btn" onclick="initializeAppUI()" title="Inicializar App" style="color:var(--gold)">&#9881;</button>
+        <span class="demo-badge" id="demo-badge">MODO DEMO</span>
+        <button class="theme-btn demo-action-btn" id="demo-reset-btn" onclick="reiniciarDemoUI()" title="Reiniciar datos de demo">&#8635; Reiniciar</button>
+        <button class="theme-btn demo-action-btn" id="demo-exit-btn" onclick="salirDemo()" title="Salir de la demo">Salir demo</button>
+        <button class="theme-btn" id="init-app-btn" onclick="initializeAppUI()" title="Inicializar App" style="color:var(--gold)">&#9881;</button>
         <button class="theme-btn" onclick="toggleTheme()" title="Cambiar tema">&#9788;</button>
         <div class="user-info">
           <div class="user-name"><span id="user-display-name">Cargando...</span><small id="user-email"></small></div>
@@ -452,30 +481,91 @@
 
   <script>
   var USER=null,CUENTAS=[],INGRESOS=[],GASTOS=[],CATEGORIAS=[],GASTOS_PERIODO=[];
+  var MODO_DEMO=false;
   var ICONOS_CUENTA=['🏦','💳','💰','🐷','💵','🏧','📊','👛'];
   var COLORES_CUENTA=['#4f46e5','#22c55e','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#64748b'];
   var ICONOS_GASTO={'Vivienda':'🏠','Servicios':'💡','Alimentación':'🍽️','Alimentacion':'🍽️','Transporte':'🚗','Salud':'🏥','Entretenimiento':'🎬','Educación':'📚','Educacion':'📚','Ahorro':'💰','Otros':'📦','Tarjetas':'💳','Prestamos':'🏦','Telefono':'📱','Internet':'🌐'};
 
-  // nn FRECUENCIA INFO nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+  // -- FRECUENCIA INFO --
   // Cuantos cobros hay por mes segun frecuencia
   var FREC_COBROS_MES = {'Semanal':4,'Bisemanal':2,'Quincenal':2,'Mensual':1,'Anual':1,'Unico':1};
   var COBRO_ACTUAL = 1; // 1 o 2 (para bisemanal)
   var COBROS_EN_MES = 2; // default bisemanal
 
   document.addEventListener('DOMContentLoaded',init);
-  function init(){loadTheme();loadProfile();}
+  function init(){loadTheme();}
+
+  // -- Pantalla de inicio: demo compartida vs cuenta real --
+  function entrarDemo(){
+    document.getElementById('landing-demo-btn').disabled=true;
+    document.getElementById('landing-real-btn').disabled=true;
+    toast('Cargando demo...','ok');
+    google.script.run.withSuccessHandler(function(r){
+      if(r&&r.success){
+        MODO_DEMO=true;
+        aplicarPerfil(r.profile);
+      }else{
+        toast('Error: '+(r&&r.error),'err');
+        document.getElementById('landing-demo-btn').disabled=false;
+        document.getElementById('landing-real-btn').disabled=false;
+      }
+    }).withFailureHandler(function(e){
+      toast('Error: '+e.message,'err');
+      document.getElementById('landing-demo-btn').disabled=false;
+      document.getElementById('landing-real-btn').disabled=false;
+    }).entrarModoDemo();
+  }
+
+  function entrarReal(){
+    document.getElementById('landing-demo-btn').disabled=true;
+    document.getElementById('landing-real-btn').disabled=true;
+    MODO_DEMO=false;
+    loadProfile();
+  }
+
+  function salirDemo(){
+    location.reload();
+  }
+
+  function reiniciarDemoUI(){
+    if(!confirm('¿Reiniciar los datos de la demo? Se perdera lo que hayan cambiado otros visitantes y se restauraran los datos de ejemplo.'))return;
+    toast('Reiniciando demo...','ok');
+    google.script.run.withSuccessHandler(function(r){
+      if(r&&r.success){toast('Demo reiniciada','ok');refreshDashboard();loadCuentas();loadIngresos();loadGastos();loadGastosPeriodo();loadPresupuesto();loadTransferencias();}
+      else{toast('Error: '+(r&&r.error),'err');}
+    }).resetearDemo();
+  }
 
   function loadProfile(){
     google.script.run.withSuccessHandler(function(r){
-      if(r.authenticated){
-        USER={email:r.email,nombre:r.nombre,rol:r.rol,isAdmin:r.isAdmin};
-        document.getElementById('user-display-name').textContent=USER.nombre;
-        document.getElementById('user-email').textContent=USER.email;
-        document.getElementById('user-avatar').textContent=USER.nombre.charAt(0).toUpperCase();
-        if(USER.isAdmin)document.getElementById('tab-usuarios').style.display='';
-        loadCategorias();refreshDashboard();
-      }else{toast('Error: '+r.error,'err');document.getElementById('user-display-name').textContent='No autorizado';}
-    }).getCurrentUser();
+      if(r&&r.success){
+        aplicarPerfil(r.profile);
+      }else{
+        toast('Error: '+(r&&r.error),'err');
+        document.getElementById('landing-demo-btn').disabled=false;
+        document.getElementById('landing-real-btn').disabled=false;
+      }
+    }).withFailureHandler(function(e){
+      toast('Error: '+e.message,'err');
+      document.getElementById('landing-demo-btn').disabled=false;
+      document.getElementById('landing-real-btn').disabled=false;
+    }).getProfile(MODO_DEMO);
+  }
+
+  // Muestra la app ya autenticada (real o demo) y oculta la pantalla de inicio.
+  function aplicarPerfil(profile){
+    USER={email:profile.email,nombre:profile.nombre,rol:profile.rol,isAdmin:profile.isAdmin,isDemo:!!profile.isDemo};
+    document.getElementById('landing').style.display='none';
+    document.getElementById('app-root').style.display='';
+    document.getElementById('user-display-name').textContent=USER.nombre;
+    document.getElementById('user-email').textContent=USER.email;
+    document.getElementById('user-avatar').textContent=USER.nombre.charAt(0).toUpperCase();
+    if(USER.isAdmin)document.getElementById('tab-usuarios').style.display='';
+    document.getElementById('demo-badge').style.display=USER.isDemo?'inline-flex':'none';
+    document.getElementById('demo-reset-btn').style.display=USER.isDemo?'':'none';
+    document.getElementById('demo-exit-btn').style.display=USER.isDemo?'':'none';
+    document.getElementById('init-app-btn').style.display=USER.isDemo?'none':'';
+    loadCategorias();refreshDashboard();
   }
 
   function loadCategorias(){google.script.run.withSuccessHandler(function(r){if(r.success)CATEGORIAS=r.categorias||[];}).getCategorias();}
@@ -555,7 +645,7 @@
         if(pendCount>0){badge.textContent=pendCount;badge.style.display='inline';}else{badge.style.display='none';}
         renderDashboardCuentas(res.cuentas);renderProximasVencer(res.proximasVencer);
       }else{toast('Error: '+r.error,'err');}
-    }).withFailureHandler(function(e){toast('Error: '+e.message,'err');}).getResumen();
+    }).withFailureHandler(function(e){toast('Error: '+e.message,'err');}).getResumen(MODO_DEMO);
   }
 
   function renderDashboardCuentas(cuentas){
@@ -574,7 +664,7 @@
     }).join('');
   }
 
-  function loadCuentas(){google.script.run.withSuccessHandler(function(r){if(r.success){CUENTAS=r.cuentas||[];document.getElementById('cuentas-total').textContent=formatMoney(r.total);renderCuentas();}}).getCuentas();}
+  function loadCuentas(){google.script.run.withSuccessHandler(function(r){if(r.success){CUENTAS=r.cuentas||[];document.getElementById('cuentas-total').textContent=formatMoney(r.total);renderCuentas();}}).getCuentas(MODO_DEMO);}
   function renderCuentas(){
     var c=document.getElementById('cuentas-list');
     if(!CUENTAS.length){c.innerHTML='<p style="color:var(--text2);text-align:center;padding:40px;grid-column:1/-1">No hay cuentas registradas.</p>';return;}
@@ -592,7 +682,7 @@
     var data={nombre:document.getElementById('cuenta-nombre').value,tipo:document.getElementById('cuenta-tipo').value,saldo:parseFloat(document.getElementById('cuenta-saldo').value)||0,icono:document.getElementById('cuenta-icono').value,color:document.getElementById('cuenta-color').value,notas:document.getElementById('cuenta-notas').value};
     if(!data.nombre){toast('Ingrese el nombre','err');return;}
     toast('Guardando...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Cuenta creada','ok');loadCuentas();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).addCuenta(data);
+    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Cuenta creada','ok');loadCuentas();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).addCuenta(data,MODO_DEMO);
   }
   function openEditCuentaModal(id){
     var x=CUENTAS.find(function(c){return c.id===id;});if(!x)return;
@@ -605,10 +695,10 @@
   function updateCuentaSubmit(id){
     var data={nombre:document.getElementById('cuenta-nombre').value,tipo:document.getElementById('cuenta-tipo').value,saldo:parseFloat(document.getElementById('cuenta-saldo').value)||0,icono:document.getElementById('cuenta-icono').value,color:document.getElementById('cuenta-color').value,notas:document.getElementById('cuenta-notas').value};
     toast('Guardando...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Cuenta actualizada','ok');loadCuentas();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).updateCuenta(id,data);
+    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Cuenta actualizada','ok');loadCuentas();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).updateCuenta(id,data,MODO_DEMO);
   }
   function confirmDeleteCuenta(id,nombre){openModal('Eliminar Cuenta','<p>¿Eliminar la cuenta <strong>'+esc(nombre)+'</strong>?</p>','<button class="btn bs" onclick="closeModal()">Cancelar</button><button class="btn br" onclick="deleteCuentaConfirm(\''+id+'\')">Eliminar</button>');}
-  function deleteCuentaConfirm(id){google.script.run.withSuccessHandler(function(r){closeModal();if(r.success){toast('Cuenta eliminada','ok');loadCuentas();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).deleteCuenta(id);}
+  function deleteCuentaConfirm(id){google.script.run.withSuccessHandler(function(r){closeModal();if(r.success){toast('Cuenta eliminada','ok');loadCuentas();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).deleteCuenta(id,MODO_DEMO);}
 
   function loadIngresos(){
     google.script.run.withSuccessHandler(function(r){
@@ -619,7 +709,7 @@
 
         actualizarInfoFrecuencia();
       }
-    }).getIngresos();
+    }).getIngresos(MODO_DEMO);
   }
   function renderIngresos(){
     var tbody=document.getElementById('ingresos-table');
@@ -639,14 +729,14 @@
     if(!sel||!info)return;
     var frec=sel.value,cobros=FREC_COBROS_MES[frec]||1;
     info.style.display='block';
-    info.textContent='n Con frecuencia '+frec+': '+cobros+' cobro(s) por mes. El presupuesto y periodo se adaptaran automaticamente.';
+    info.textContent='ℹ️ Con frecuencia '+frec+': '+cobros+' cobro(s) por mes. El presupuesto y periodo se adaptaran automaticamente.';
   }
   function saveIngreso(){
     var cs=document.getElementById('ingreso-cuenta'),co=cs.options[cs.selectedIndex];
     var data={nombre:document.getElementById('ingreso-nombre').value,monto:parseFloat(document.getElementById('ingreso-monto').value)||0,frecuencia:document.getElementById('ingreso-frecuencia').value,dia_cobro:parseInt(document.getElementById('ingreso-dia').value)||1,cuenta_destino_id:cs.value,cuenta_destino:co&&co.dataset.nombre?co.dataset.nombre:'',activo_recurrente:document.getElementById('ingreso-activo').checked,notas:document.getElementById('ingreso-notas').value};
     if(!data.nombre){toast('Ingrese el nombre','err');return;}
     toast('Guardando...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Ingreso creado','ok');loadIngresos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).addIngreso(data);
+    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Ingreso creado','ok');loadIngresos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).addIngreso(data,MODO_DEMO);
   }
   function openEditIngresoModal(id){
     var i=INGRESOS.find(function(x){return x.id===id;});if(!i)return;
@@ -659,12 +749,12 @@
     var cs=document.getElementById('ingreso-cuenta'),co=cs.options[cs.selectedIndex];
     var data={nombre:document.getElementById('ingreso-nombre').value,monto:parseFloat(document.getElementById('ingreso-monto').value)||0,frecuencia:document.getElementById('ingreso-frecuencia').value,dia_cobro:parseInt(document.getElementById('ingreso-dia').value)||1,cuenta_destino_id:cs.value,cuenta_destino:co&&co.dataset.nombre?co.dataset.nombre:'',activo_recurrente:document.getElementById('ingreso-activo').checked,notas:document.getElementById('ingreso-notas').value};
     toast('Guardando...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Ingreso actualizado','ok');loadIngresos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).updateIngreso(id,data);
+    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Ingreso actualizado','ok');loadIngresos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).updateIngreso(id,data,MODO_DEMO);
   }
   function confirmDeleteIngreso(id){openModal('Eliminar Ingreso','<p>¿Eliminar este ingreso?</p>','<button class="btn bs" onclick="closeModal()">Cancelar</button><button class="btn br" onclick="deleteIngresoConfirm(\''+id+'\')">Eliminar</button>');}
-  function deleteIngresoConfirm(id){google.script.run.withSuccessHandler(function(r){closeModal();if(r.success){toast('Ingreso eliminado','ok');loadIngresos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).deleteIngreso(id);}
+  function deleteIngresoConfirm(id){google.script.run.withSuccessHandler(function(r){closeModal();if(r.success){toast('Ingreso eliminado','ok');loadIngresos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).deleteIngreso(id,MODO_DEMO);}
 
-  function loadGastos(){google.script.run.withSuccessHandler(function(r){if(r.success){GASTOS=r.gastos||[];document.getElementById('gastos-total').textContent=formatMoney(r.totalFacturas);document.getElementById('gastos-pagado').textContent=formatMoney(r.totalPagado);document.getElementById('gastos-pendiente').textContent=formatMoney(r.totalPendiente);renderGastos();}}).getGastos();}
+  function loadGastos(){google.script.run.withSuccessHandler(function(r){if(r.success){GASTOS=r.gastos||[];document.getElementById('gastos-total').textContent=formatMoney(r.totalFacturas);document.getElementById('gastos-pagado').textContent=formatMoney(r.totalPagado);document.getElementById('gastos-pendiente').textContent=formatMoney(r.totalPendiente);renderGastos();}}).getGastos(MODO_DEMO);}
   function renderGastos(){
     var tbody=document.getElementById('gastos-table');
     if(!GASTOS.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text2)">No hay gastos</td></tr>';return;}
@@ -697,7 +787,7 @@
     var data={nombre:document.getElementById('gasto-nombre').value,monto:parseFloat(document.getElementById('gasto-monto').value)||0,dia_vence:parseInt(document.getElementById('gasto-dia').value)||1,categoria:document.getElementById('gasto-categoria').value,cuenta_id:cs.value,cuenta:co&&co.dataset.nombre?co.dataset.nombre:'',recurrente:document.getElementById('gasto-recurrente').checked,pagado:false,notas:document.getElementById('gasto-notas').value};
     if(!data.nombre){toast('Ingrese el nombre','err');return;}
     toast('Guardando...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Gasto creado','ok');loadGastos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).addGasto(data);
+    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Gasto creado','ok');loadGastos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).addGasto(data,MODO_DEMO);
   }
   function openEditGastoModal(id){
     var g=GASTOS.find(function(x){return x.id===id;});if(!g)return;
@@ -710,23 +800,23 @@
     var cs=document.getElementById('gasto-cuenta'),co=cs.options[cs.selectedIndex];
     var data={nombre:document.getElementById('gasto-nombre').value,monto:parseFloat(document.getElementById('gasto-monto').value)||0,dia_vence:parseInt(document.getElementById('gasto-dia').value)||1,categoria:document.getElementById('gasto-categoria').value,cuenta_id:cs.value,cuenta:co&&co.dataset.nombre?co.dataset.nombre:'',recurrente:document.getElementById('gasto-recurrente').checked,notas:document.getElementById('gasto-notas').value};
     toast('Guardando...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Gasto actualizado','ok');loadGastos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).updateGasto(id,data);
+    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Gasto actualizado','ok');loadGastos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).updateGasto(id,data,MODO_DEMO);
   }
   function toggleGastoPagado(id,pagado){
     toast(pagado?'Marcando como pagado...':'Desmarcando...','ok');
 
     google.script.run.withSuccessHandler(function(r){
       if(r.success){
-        toast(pagado?'n Pagado y copiado al Periodo':'Desmarcado','ok');
+        toast(pagado?'✅ Pagado y copiado al Periodo':'Desmarcado','ok');
         loadGastos();loadCuentas();refreshDashboard();
         if(pagado) loadPresupuesto();
       }else{toast('Error: '+r.error,'err');}
-    }).marcarGastoPagado(id,pagado);
+    }).marcarGastoPagado(id,pagado,MODO_DEMO);
   }
   function confirmDeleteGasto(id){openModal('Eliminar Gasto','<p>¿Eliminar este gasto?</p>','<button class="btn bs" onclick="closeModal()">Cancelar</button><button class="btn br" onclick="deleteGastoConfirm(\''+id+'\')">Eliminar</button>');}
-  function deleteGastoConfirm(id){google.script.run.withSuccessHandler(function(r){closeModal();if(r.success){toast('Gasto eliminado','ok');loadGastos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).deleteGasto(id);}
+  function deleteGastoConfirm(id){google.script.run.withSuccessHandler(function(r){closeModal();if(r.success){toast('Gasto eliminado','ok');loadGastos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).deleteGasto(id,MODO_DEMO);}
   function resetearFacturas(){openModal('Resetear Facturas','<p>Desmarcara todas las facturas recurrentes como NO pagadas para el nuevo mes.</p><p style="color:var(--gold);margin-top:12px">¿Continuar?</p>','<button class="btn bs" onclick="closeModal()">Cancelar</button><button class="btn br" onclick="doResetearFacturas()">Resetear</button>');}
-  function doResetearFacturas(){toast('Reseteando...','ok');google.script.run.withSuccessHandler(function(r){closeModal();if(r.success){toast('Se resetearon '+r.count+' facturas','ok');loadGastos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).resetearFacturasMes();}
+  function doResetearFacturas(){toast('Reseteando...','ok');google.script.run.withSuccessHandler(function(r){closeModal();if(r.success){toast('Se resetearon '+r.count+' facturas','ok');loadGastos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).resetearFacturasMes(MODO_DEMO);}
 
   // ============================================================
   // GASTOS DEL PERIODO
@@ -744,7 +834,7 @@
         renderGastosPeriodo();
         loadHistorialPeriodos();
       }
-    }).getGastosPeriodo();
+    }).getGastosPeriodo(MODO_DEMO);
   }
   function renderGastosPeriodo(){
     var tbody=document.getElementById('periodo-table');
@@ -775,7 +865,7 @@
     var data={nombre:document.getElementById('gp-nombre').value,monto:parseFloat(document.getElementById('gp-monto').value)||0,categoria:document.getElementById('gp-categoria').value,cuenta_id:cs.value,cuenta:co&&co.dataset.nombre?co.dataset.nombre:'',notas:document.getElementById('gp-notas').value};
     if(!data.nombre){toast('Ingrese el nombre','err');return;}
     toast('Guardando...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Gasto registrado','ok');loadGastosPeriodo();loadPresupuesto();}else{toast('Error: '+r.error,'err');}}).addGastoPeriodo(data);
+    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Gasto registrado','ok');loadGastosPeriodo();loadPresupuesto();}else{toast('Error: '+r.error,'err');}}).addGastoPeriodo(data,MODO_DEMO);
   }
   function openEditGastoPeriodoModal(id){
     var g=GASTOS_PERIODO.find(function(x){return x.id===id;});if(!g)return;
@@ -789,15 +879,15 @@
 
     var data={nombre:document.getElementById('gp-nombre').value,monto:parseFloat(document.getElementById('gp-monto').value)||0,categoria:document.getElementById('gp-categoria').value,cuenta_id:cs.value,cuenta:co&&co.dataset.nombre?co.dataset.nombre:'',notas:document.getElementById('gp-notas').value};
     toast('Guardando...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Gasto actualizado','ok');loadGastosPeriodo();loadPresupuesto();}else{toast('Error: '+r.error,'err');}}).updateGastoPeriodo(id,data);
+    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Gasto actualizado','ok');loadGastosPeriodo();loadPresupuesto();}else{toast('Error: '+r.error,'err');}}).updateGastoPeriodo(id,data,MODO_DEMO);
   }
   function confirmDeleteGastoPeriodo(id){openModal('Eliminar Gasto','<p>¿Eliminar este gasto del periodo?</p>','<button class="btn bs" onclick="closeModal()">Cancelar</button><button class="btn br" onclick="deleteGastoPeriodoConfirm(\''+id+'\')">Eliminar</button>');}
-  function deleteGastoPeriodoConfirm(id){google.script.run.withSuccessHandler(function(r){closeModal();if(r.success){toast('Gasto eliminado','ok');loadGastosPeriodo();loadPresupuesto();}else{toast('Error: '+r.error,'err');}}).deleteGastoPeriodo(id);}
+  function deleteGastoPeriodoConfirm(id){google.script.run.withSuccessHandler(function(r){closeModal();if(r.success){toast('Gasto eliminado','ok');loadGastosPeriodo();loadPresupuesto();}else{toast('Error: '+r.error,'err');}}).deleteGastoPeriodo(id,MODO_DEMO);}
 
   function loadHistorialPeriodos(){
     google.script.run.withSuccessHandler(function(r){
       if(r.success)renderHistorialPeriodos(r.historial||[]);
-    }).getHistorialPeriodos();
+    }).getHistorialPeriodos(MODO_DEMO);
   }
   function renderHistorialPeriodos(historial){
     var container=document.getElementById('historial-periodos');
@@ -827,7 +917,7 @@
   // ============================================================
   // TRANSFERENCIAS
   // ============================================================
-  function loadTransferencias(){google.script.run.withSuccessHandler(function(r){if(r.success)renderTransferencias(r.transferencias||[]);}).getTransferencias(100);}
+  function loadTransferencias(){google.script.run.withSuccessHandler(function(r){if(r.success)renderTransferencias(r.transferencias||[]);}).getTransferencias(100,MODO_DEMO);}
   function renderTransferencias(transferencias){
     var tbody=document.getElementById('transferencias-table');
     if(!transferencias.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text2)">No hay movimientos</td></tr>';return;}
@@ -852,7 +942,7 @@
     if(data.monto<=0){toast('Ingrese un monto valido','err');return;}
     if(data.desde_cuenta_id===data.hacia_cuenta_id){toast('Seleccione cuentas diferentes','err');return;}
     toast('Transfiriendo...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Transferencia completada','ok');loadTransferencias();loadCuentas();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).registrarTransferencia(data);
+    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Transferencia completada','ok');loadTransferencias();loadCuentas();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).registrarTransferencia(data,MODO_DEMO);
   }
 
   // ============================================================
@@ -988,9 +1078,9 @@
           actualizarInfoFrecuencia();
 
           renderPresupuesto();
-        }).withFailureHandler(function(){calcularDatosCobros();renderPresupuesto();}).getHistorialPeriodos();
-      }).withFailureHandler(function(){renderPresupuesto();}).getPresupuestos();
-    }).withFailureHandler(function(){renderPresupuesto();}).getGastosPeriodo();
+        }).withFailureHandler(function(){calcularDatosCobros();renderPresupuesto();}).getHistorialPeriodos(MODO_DEMO);
+      }).withFailureHandler(function(){renderPresupuesto();}).getPresupuestos(MODO_DEMO);
+    }).withFailureHandler(function(){renderPresupuesto();}).getGastosPeriodo(MODO_DEMO);
   }
 
   function calcularDatosCobros(){
@@ -1133,7 +1223,7 @@
     google.script.run
       .withSuccessHandler(function(r){if(r&&r.success){toast('Presupuesto guardado n','ok');calcularDatosCobros();renderPresupuesto();}else{toast((r&&r.error)||'Error al guardar','err');}})
       .withFailureHandler(function(err){toast('Error: '+err,'err');})
-      .guardarPresupuestos(lista);
+      .guardarPresupuestos(lista,MODO_DEMO);
   }
 
   function confirmarReinicioPresupuesto(){
@@ -1156,7 +1246,7 @@
     google.script.run
       .withSuccessHandler(function(r){
         if(r&&r.success){
-          toast('n Cobro '+COBRO_ACTUAL+' registrado. '+r.gastosArchivados+' gastos archivados.','ok');
+          toast('✅ Cobro '+COBRO_ACTUAL+' registrado. '+r.gastosArchivados+' gastos archivados.','ok');
           GASTOS_PERIODO=[];
           PRESUPUESTOS={};PRESUPUESTOS2={};
           DATOS_COBROS={c1:{gastos:{},total:0,ingreso:0,ahorro:0},c2:{gastos:{},total:0,ingreso:0,ahorro:0},mes:{gastos:{},total:0,ingreso:0,ahorro:0}};
@@ -1165,7 +1255,7 @@
         }else{toast('Error: '+(r&&r.error),'err');}
       })
       .withFailureHandler(function(err){toast('Error: '+err,'err');})
-      .reiniciarPeriodo(f.monto||0);
+      .reiniciarPeriodo(f.monto||0,MODO_DEMO);
   }
 
   function cambiarVistaBarras(vista){

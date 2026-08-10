@@ -24,6 +24,17 @@ El sistema se adapta automaticamente a la frecuencia de cobro del usuario y ofre
 - **Graficas Interactivas.** Pastel de distribucion de gastos y barras comparando Cobro 1, Cobro 2 y Mes.
 - **Calculadora Integrada.** Calculadora flotante disponible en toda la aplicacion.
 - **Gestion de Usuarios.** Roles Administrador y Cliente gestionados por Google Sheets.
+- **Multiusuario con datos privados.** Cada cuenta (cliente o admin) solo ve sus propias cuentas, ingresos, gastos, presupuestos e historial — nunca los de otro usuario.
+- **Modo Demo.** Pantalla de inicio con una cuenta demo compartida y de ejemplo, para explorar la aplicacion antes de iniciar sesion con tu cuenta real.
+
+## Multiusuario y Modo Demo
+
+Cada documento de Firestore (cuentas, ingresos, gastos, gastos del periodo, historial, presupuestos, transferencias) queda marcado con el campo `usuario_id` del dueño. Todas las funciones de lectura filtran por ese campo y las de edicion/borrado verifican la propiedad antes de aplicar el cambio, asi que ninguna cuenta puede ver ni modificar los datos de otra.
+
+Al abrir la aplicacion aparece primero una pantalla de inicio con dos opciones:
+
+- **Ver Demo.** Entra a una cuenta demo compartida (`demo@gestionfinanciera.app`) con datos de ejemplo, sin necesidad de iniciar sesion. Cualquier visitante puede usar el boton "Reiniciar Demo" en el encabezado si otro visitante la dejo desordenada.
+- **Entrar con mi cuenta.** Continua con el flujo normal (Google + hoja de Usuarios) hacia los datos privados de esa cuenta.
 
 ## Arquitectura del Sistema
 

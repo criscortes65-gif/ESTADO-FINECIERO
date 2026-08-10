@@ -14,6 +14,10 @@ var CONFIG = {
   USERS_SHEET_NAME:     'Usuarios',
   ADMIN_EMAIL:          'ccortes@ingenieroelm.com',
 
+  // -- Cuenta Demo (compartida, para visitantes antes de iniciar sesion) --
+  DEMO_USER_ID:   'demo@gestionfinanciera.app',
+  DEMO_USER_NAME: 'Cuenta Demo',
+
   // -- Colecciones de Firestore --
   COLLECTION_CUENTAS:        'cuentas',
   COLLECTION_INGRESOS:       'ingresos',
@@ -82,7 +86,7 @@ function setupUsuariosSheet() {
 
   var now = new Date().toISOString();
 
-  sheet.appendRow(['usr_' + Date.now(),       'ccortes@ingenieroelm.com', 'Cristina Cortes', 'admin',   'TRUE', now]);
+  sheet.appendRow(['usr_' + Date.now(),       'ccortes@ingenieroelm.com', 'Cristina Cortes', 'admin',   'TRUE', now]);
   sheet.appendRow(['usr_' + (Date.now() + 1), 'ismaelrt.1542@gmail.com',  'Ismael RT',       'cliente', 'TRUE', now]);
 
   sheet.setColumnWidth(1, 160);
@@ -171,12 +175,46 @@ function getCurrentUser() {
   }
 }
 
-function getProfile() {
+// ============================================================
+//  MODO DEMO - contexto compartido para visitantes sin cuenta
+// ============================================================
+// Cuando modoDemo es true, todas las operaciones de datos (cuentas,
+// ingresos, gastos, presupuesto, etc.) se resuelven contra una cuenta
+// "demo@gestionfinanciera.app" compartida por todos los visitantes,
+// separada por completo de los datos reales de cada usuario. No requiere
+// haber iniciado sesion con Google ni estar en la hoja de Usuarios.
+function resolveContext_(modoDemo) {
+  if (modoDemo) {
+    return {
+      authenticated: true,
+      email: CONFIG.DEMO_USER_ID,
+      nombre: CONFIG.DEMO_USER_NAME,
+      rol: 'demo',
+      isAdmin: false,
+      isDemo: true
+    };
+  }
+  return getCurrentUser();
+}
 
-  try {
-    var user = getCurrentUser();
+// Confirma que el documento indicado pertenece al usuario actual antes de
+// permitir editarlo o borrarlo (evita que un usuario modifique datos de otro
+// adivinando su ID de documento).
+function verificarPropietario_(collection, id, usuarioEmail) {
+  try {
+    var doc = firestoreRequest_('GET', '/' + collection + '/' + id);
+    var obj = parseFirestoreDoc_(doc);
+    return !!(obj && obj.usuario_id === usuarioEmail);
+  } catch (e) {
+    return false;
+  }
+}
+
+function getProfile(modoDemo) {
+  try {
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
-    return { success: true, profile: { email: user.email, nombre: user.nombre, rol: user.rol, isAdmin: user.isAdmin } };
+    return { success: true, profile: { email: user.email, nombre: user.nombre, rol: user.rol, isAdmin: user.isAdmin, isDemo: !!user.isDemo } };
   } catch (e) {
     return { success: false, error: e.toString() };
   }
@@ -263,7 +301,7 @@ function updateUsuario(id, data) {
       }
     }
 
-    if (data.nombre  !== undefined) sheet.getRange(rowNum, headers.indexOf('nombre')  + 1).setValue(data.nombre);
+    if (data.nombre  !== undefined) sheet.getRange(rowNum, headers.indexOf('nombre')  + 1).setValue(data.nombre);
     if (data.rol     !== undefined) sheet.getRange(rowNum, headers.indexOf('rol')      + 1).setValue(data.rol);
     if (data.activo  !== undefined) sheet.getRange(rowNum, headers.indexOf('activo')   + 1).setValue(data.activo ? 'TRUE' : 'FALSE');
 
@@ -300,14 +338,14 @@ function deleteUsuario(id) {
 // ============================================================
 //  CUENTAS BANCARIAS - CRUD (Firebase)
 // ============================================================
-function getCuentas() {
+function getCuentas(modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
 
     var docs    = firestoreGetAll_(CONFIG.COLLECTION_CUENTAS);
     var cuentas = docs.map(function(doc){ return parseFirestoreDoc_(doc); })
-                      .filter(function(c){ return c && c.activo !== false; });
+                      .filter(function(c){ return c && c.activo !== false && c.usuario_id === user.email; });
     var total   = cuentas.reduce(function(s,c){ return s + (parseFloat(c.saldo)||0); }, 0);
 
     return { success: true, cuentas: cuentas, total: total };
@@ -316,16 +354,17 @@ function getCuentas() {
   }
 }
 
-function addCuenta(data) {
+function addCuenta(data, modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
 
     var cuenta = {
       nombre: data.nombre || '', saldo: parseFloat(data.saldo) || 0,
-      icono: data.icono || 'n', color: data.color || '#4f46e5',
+      icono: data.icono || '🏦', color: data.color || '#4f46e5',
       notas: data.notas || '', tipo: data.tipo || 'corriente',
-      activo: true, fecha_creacion: new Date().toISOString(), creado_por: user.email
+      activo: true, fecha_creacion: new Date().toISOString(), creado_por: user.email,
+      usuario_id: user.email
     };
 
     var response = firestoreRequest_('POST', '/' + CONFIG.COLLECTION_CUENTAS, { fields: objectToFirestore_(cuenta) });
@@ -336,10 +375,11 @@ function addCuenta(data) {
 
 }
 
-function updateCuenta(id, data) {
+function updateCuenta(id, data, modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
+    if (!verificarPropietario_(CONFIG.COLLECTION_CUENTAS, id, user.email)) return { success: false, error: 'No autorizado para modificar esta cuenta' };
 
     var fields = {}, updateFields = [];
     if (data.nombre    !== undefined) { fields.nombre    = toFirestoreValue_(data.nombre);                    updateFields.push('nombre'); }
@@ -353,15 +393,15 @@ function updateCuenta(id, data) {
     firestoreRequest_('PATCH', '/' + CONFIG.COLLECTION_CUENTAS + '/' + id + '?' + mask, { fields: fields });
     return { success: true };
   } catch (e) {
-
-    return { success: false, error: e.toString() };
+    return { success: false, error: e.toString() };
   }
 }
 
-function deleteCuenta(id) {
+function deleteCuenta(id, modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
+    if (!verificarPropietario_(CONFIG.COLLECTION_CUENTAS, id, user.email)) return { success: false, error: 'No autorizado para eliminar esta cuenta' };
     firestoreRequest_('PATCH', '/' + CONFIG.COLLECTION_CUENTAS + '/' + id + '?updateMask.fieldPaths=activo', { fields: { activo: toFirestoreValue_(false) } });
     return { success: true };
   } catch (e) {
@@ -372,14 +412,14 @@ function deleteCuenta(id) {
 // ============================================================
 //  INGRESOS - CRUD (Firebase)
 // ============================================================
-function getIngresos() {
+function getIngresos(modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
 
     var docs     = firestoreGetAll_(CONFIG.COLLECTION_INGRESOS);
     var ingresos = docs.map(function(doc){ return parseFirestoreDoc_(doc); })
-                       .filter(function(i){ return i && i.activo !== false; });
+                       .filter(function(i){ return i && i.activo !== false && i.usuario_id === user.email; });
 
     var totalMensual = ingresos.reduce(function(s, i) {
       if (!i.activo_recurrente) return s;
@@ -401,9 +441,9 @@ function getIngresos() {
   }
 }
 
-function addIngreso(data) {
+function addIngreso(data, modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
 
     var ingreso = {
@@ -411,7 +451,8 @@ function addIngreso(data) {
       frecuencia: data.frecuencia || 'Mensual', dia_cobro: parseInt(data.dia_cobro) || 1,
       cuenta_destino: data.cuenta_destino || '', cuenta_destino_id: data.cuenta_destino_id || '',
       activo_recurrente: data.activo_recurrente !== false, notas: data.notas || '',
-      activo: true, fecha_creacion: new Date().toISOString(), creado_por: user.email
+      activo: true, fecha_creacion: new Date().toISOString(), creado_por: user.email,
+      usuario_id: user.email
     };
 
     var response = firestoreRequest_('POST', '/' + CONFIG.COLLECTION_INGRESOS, { fields: objectToFirestore_(ingreso) });
@@ -421,10 +462,11 @@ function addIngreso(data) {
   }
 }
 
-function updateIngreso(id, data) {
+function updateIngreso(id, data, modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
+    if (!verificarPropietario_(CONFIG.COLLECTION_INGRESOS, id, user.email)) return { success: false, error: 'No autorizado para modificar este ingreso' };
 
     var fields = {}, updateFields = [];
     if (data.nombre             !== undefined) { fields.nombre             = toFirestoreValue_(data.nombre);                        updateFields.push('nombre'); }
@@ -444,11 +486,11 @@ function updateIngreso(id, data) {
   }
 }
 
-function deleteIngreso(id) {
+function deleteIngreso(id, modoDemo) {
   try {
-
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
+    if (!verificarPropietario_(CONFIG.COLLECTION_INGRESOS, id, user.email)) return { success: false, error: 'No autorizado para eliminar este ingreso' };
     firestoreRequest_('PATCH', '/' + CONFIG.COLLECTION_INGRESOS + '/' + id + '?updateMask.fieldPaths=activo', { fields: { activo: toFirestoreValue_(false) } });
     return { success: true };
   } catch (e) {
@@ -456,10 +498,11 @@ function updateIngreso(id, data) {
   }
 }
 
-function registrarIngresoRecibido(ingresoId, data) {
+function registrarIngresoRecibido(ingresoId, data, modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
+    if (!verificarPropietario_(CONFIG.COLLECTION_INGRESOS, ingresoId, user.email)) return { success: false, error: 'No autorizado para registrar este ingreso' };
 
     var ingresoDoc = firestoreRequest_('GET', '/' + CONFIG.COLLECTION_INGRESOS + '/' + ingresoId);
     var ingreso    = parseFirestoreDoc_(ingresoDoc);
@@ -471,7 +514,7 @@ function registrarIngresoRecibido(ingresoId, data) {
     if (cuentaId) {
       var cuentaDoc = firestoreRequest_('GET', '/' + CONFIG.COLLECTION_CUENTAS + '/' + cuentaId);
       var cuenta    = parseFirestoreDoc_(cuentaDoc);
-      if (cuenta) updateCuenta(cuentaId, { saldo: (parseFloat(cuenta.saldo)||0) + monto });
+      if (cuenta) updateCuenta(cuentaId, { saldo: (parseFloat(cuenta.saldo)||0) + monto }, modoDemo);
     }
 
     firestoreRequest_('POST', '/' + CONFIG.COLLECTION_TRANSFERENCIAS, {
@@ -482,7 +525,7 @@ function registrarIngresoRecibido(ingresoId, data) {
         hacia_cuenta_id: cuentaId, monto: monto, categoria: 'Ingreso',
         descripcion: ingreso.nombre + (data.notas ? ' - ' + data.notas : ''),
         referencia_id: ingresoId, registrado_por: user.email,
-        fecha_registro: new Date().toISOString()
+        fecha_registro: new Date().toISOString(), usuario_id: user.email
       })
     });
     return { success: true };
@@ -494,14 +537,14 @@ function registrarIngresoRecibido(ingresoId, data) {
 // ============================================================
 //  GASTOS / FACTURAS - CRUD (Firebase)
 // ============================================================
-function getGastos() {
+function getGastos(modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
 
     var docs   = firestoreGetAll_(CONFIG.COLLECTION_GASTOS);
     var gastos = docs.map(function(doc){ return parseFirestoreDoc_(doc); })
-                     .filter(function(g){ return g && g.activo !== false; });
+                     .filter(function(g){ return g && g.activo !== false && g.usuario_id === user.email; });
 
     var totalFacturas = 0, totalPagado = 0, totalPendiente = 0;
     gastos.forEach(function(g) {
@@ -516,9 +559,9 @@ function getGastos() {
   }
 }
 
-function addGasto(data) {
+function addGasto(data, modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
 
     var gasto = {
@@ -527,7 +570,8 @@ function addGasto(data) {
       cuenta: data.cuenta || '', cuenta_id: data.cuenta_id || '',
       pagado: data.pagado || false, fecha_pago: data.fecha_pago || '',
       recurrente: data.recurrente !== false, notas: data.notas || '',
-      activo: true, fecha_creacion: new Date().toISOString(), creado_por: user.email
+      activo: true, fecha_creacion: new Date().toISOString(), creado_por: user.email,
+      usuario_id: user.email
     };
 
     var response = firestoreRequest_('POST', '/' + CONFIG.COLLECTION_GASTOS, { fields: objectToFirestore_(gasto) });
@@ -535,13 +579,14 @@ function addGasto(data) {
   } catch (e) {
     return { success: false, error: e.toString() };
 
-  }
+  }
 }
 
-function updateGasto(id, data) {
+function updateGasto(id, data, modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
+    if (!verificarPropietario_(CONFIG.COLLECTION_GASTOS, id, user.email)) return { success: false, error: 'No autorizado para modificar este gasto' };
 
     var fields = {}, updateFields = [];
     if (data.nombre     !== undefined) { fields.nombre     = toFirestoreValue_(data.nombre);                  updateFields.push('nombre'); }
@@ -564,10 +609,11 @@ function updateGasto(id, data) {
   }
 }
 
-function deleteGasto(id) {
+function deleteGasto(id, modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
+    if (!verificarPropietario_(CONFIG.COLLECTION_GASTOS, id, user.email)) return { success: false, error: 'No autorizado para eliminar este gasto' };
     firestoreRequest_('PATCH', '/' + CONFIG.COLLECTION_GASTOS + '/' + id + '?updateMask.fieldPaths=activo', { fields: { activo: toFirestoreValue_(false) } });
     return { success: true };
   } catch (e) {
@@ -575,14 +621,15 @@ function deleteGasto(id) {
   }
 }
 
-function marcarGastoPagado(id, pagado) {
+function marcarGastoPagado(id, pagado, modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
 
     var gastoDoc = firestoreRequest_('GET', '/' + CONFIG.COLLECTION_GASTOS + '/' + id);
     var gasto    = parseFirestoreDoc_(gastoDoc);
     if (!gasto) return { success: false, error: 'Gasto no encontrado' };
+    if (gasto.usuario_id !== user.email) return { success: false, error: 'No autorizado para modificar este gasto' };
 
     // Marcar como pagado/no pagado en Gastos
     firestoreRequest_('PATCH', '/' + CONFIG.COLLECTION_GASTOS + '/' + id + '?updateMask.fieldPaths=pagado&updateMask.fieldPaths=fecha_pago', {
@@ -595,14 +642,14 @@ function marcarGastoPagado(id, pagado) {
         var cuentaDoc = firestoreRequest_('GET', '/' + CONFIG.COLLECTION_CUENTAS + '/' + gasto.cuenta_id);
         var cuenta    = parseFirestoreDoc_(cuentaDoc);
         if (cuenta) {
-          updateCuenta(gasto.cuenta_id, { saldo: (parseFloat(cuenta.saldo)||0) - (parseFloat(gasto.monto)||0) });
+          updateCuenta(gasto.cuenta_id, { saldo: (parseFloat(cuenta.saldo)||0) - (parseFloat(gasto.monto)||0) }, modoDemo);
           firestoreRequest_('POST', '/' + CONFIG.COLLECTION_TRANSFERENCIAS, {
             fields: objectToFirestore_({
               fecha: new Date().toISOString().split('T')[0], tipo: 'gasto',
               desde_cuenta: gasto.cuenta || '', desde_cuenta_id: gasto.cuenta_id,
               hacia_cuenta: '', monto: parseFloat(gasto.monto)||0,
               categoria: gasto.categoria || 'Otros', descripcion: 'Pago: ' + gasto.nombre,
-              referencia_id: id, registrado_por: user.email, fecha_registro: new Date().toISOString()
+              referencia_id: id, registrado_por: user.email, fecha_registro: new Date().toISOString(), usuario_id: user.email
             })
           });
         }
@@ -614,7 +661,6 @@ function marcarGastoPagado(id, pagado) {
           nombre:         gasto.nombre    || '',
           monto:          parseFloat(gasto.monto) || 0,
           categoria:      gasto.categoria || 'Otros',
-
           cuenta:         gasto.cuenta    || '',
           cuenta_id:      gasto.cuenta_id || '',
           notas:          gasto.notas     || '',
@@ -622,11 +668,12 @@ function marcarGastoPagado(id, pagado) {
           fecha:          new Date().toISOString().split('T')[0],
           fecha_creacion: new Date().toISOString(),
           creado_por:     user.email,
+          usuario_id:     user.email,
           gasto_id:       id  // referencia al gasto original
         })
       });
 
-    } else {
+    } else {
       // Si se desmarca — buscar y borrar la copia del periodo
       var periodosDocs = firestoreGetAll_(CONFIG.COLLECTION_GASTOS_PERIODO);
       periodosDocs.forEach(function(doc) {
@@ -646,16 +693,16 @@ function marcarGastoPagado(id, pagado) {
   }
 }
 
-function resetearFacturasMes() {
+function resetearFacturasMes(modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
 
     var docs  = firestoreGetAll_(CONFIG.COLLECTION_GASTOS);
     var count = 0;
     docs.forEach(function(doc) {
       var gasto = parseFirestoreDoc_(doc);
-      if (gasto && gasto.activo !== false && gasto.recurrente && gasto.pagado) {
+      if (gasto && gasto.activo !== false && gasto.usuario_id === user.email && gasto.recurrente && gasto.pagado) {
         firestoreRequest_('PATCH', '/' + CONFIG.COLLECTION_GASTOS + '/' + gasto.id + '?updateMask.fieldPaths=pagado&updateMask.fieldPaths=fecha_pago', {
           fields: { pagado: toFirestoreValue_(false), fecha_pago: toFirestoreValue_('') }
         });
@@ -672,13 +719,14 @@ function resetearFacturasMes() {
 //  TRANSFERENCIAS ENTRE CUENTAS (Firebase)
 
 // ============================================================
-function getTransferencias(limit) {
+function getTransferencias(limit, modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
 
     var docs = firestoreGetAll_(CONFIG.COLLECTION_TRANSFERENCIAS);
     var transferencias = docs.map(function(doc){ return parseFirestoreDoc_(doc); })
+      .filter(function(t){ return t && t.usuario_id === user.email; })
       .sort(function(a,b){ return new Date(b.fecha_registro||b.fecha) - new Date(a.fecha_registro||a.fecha); });
 
     if (limit) transferencias = transferencias.slice(0, limit);
@@ -688,23 +736,27 @@ function getTransferencias(limit) {
   }
 }
 
-function registrarTransferencia(data) {
+function registrarTransferencia(data, modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
 
     var monto = parseFloat(data.monto) || 0;
     if (monto <= 0) return { success: false, error: 'El monto debe ser mayor a 0' };
     if (!data.desde_cuenta_id || !data.hacia_cuenta_id) return { success: false, error: 'Seleccione las cuentas' };
     if (data.desde_cuenta_id === data.hacia_cuenta_id) return { success: false, error: 'Las cuentas deben ser diferentes' };
+    if (!verificarPropietario_(CONFIG.COLLECTION_CUENTAS, data.desde_cuenta_id, user.email) ||
+        !verificarPropietario_(CONFIG.COLLECTION_CUENTAS, data.hacia_cuenta_id, user.email)) {
+      return { success: false, error: 'No autorizado para transferir entre estas cuentas' };
+    }
 
     var desdeDoc = firestoreRequest_('GET', '/' + CONFIG.COLLECTION_CUENTAS + '/' + data.desde_cuenta_id);
     var desde    = parseFirestoreDoc_(desdeDoc);
-    if (desde) updateCuenta(data.desde_cuenta_id, { saldo: (parseFloat(desde.saldo)||0) - monto });
+    if (desde) updateCuenta(data.desde_cuenta_id, { saldo: (parseFloat(desde.saldo)||0) - monto }, modoDemo);
 
     var haciaDoc = firestoreRequest_('GET', '/' + CONFIG.COLLECTION_CUENTAS + '/' + data.hacia_cuenta_id);
     var hacia    = parseFirestoreDoc_(haciaDoc);
-    if (hacia) updateCuenta(data.hacia_cuenta_id, { saldo: (parseFloat(hacia.saldo)||0) + monto });
+    if (hacia) updateCuenta(data.hacia_cuenta_id, { saldo: (parseFloat(hacia.saldo)||0) + monto }, modoDemo);
 
     var response = firestoreRequest_('POST', '/' + CONFIG.COLLECTION_TRANSFERENCIAS, {
       fields: objectToFirestore_({
@@ -714,9 +766,8 @@ function registrarTransferencia(data) {
         hacia_cuenta: data.hacia_cuenta || '', hacia_cuenta_id: data.hacia_cuenta_id,
         monto: monto, categoria: 'Transferencia',
         descripcion: data.descripcion || 'Transferencia entre cuentas',
-        registrado_por: user.email, fecha_registro: new Date().toISOString()
-
-      })
+        registrado_por: user.email, fecha_registro: new Date().toISOString(), usuario_id: user.email
+      })
     });
     return { success: true, id: response.name ? response.name.split('/').pop() : null };
   } catch (e) {
@@ -728,14 +779,14 @@ function registrarTransferencia(data) {
 //  RESUMEN FINANCIERO
 // ============================================================
 
-function getResumen() {
+function getResumen(modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
 
-    var cuentasResult  = getCuentas();
-    var ingresosResult = getIngresos();
-    var gastosResult   = getGastos();
+    var cuentasResult  = getCuentas(modoDemo);
+    var ingresosResult = getIngresos(modoDemo);
+    var gastosResult   = getGastos(modoDemo);
 
     var totalCuentas   = cuentasResult.success  ? cuentasResult.total          : 0;
     var totalIngresos  = ingresosResult.success  ? ingresosResult.totalMensual  : 0;
@@ -797,28 +848,29 @@ function getCategorias() {
 // ============================================================
 //  PRESUPUESTOS POR CATEGORIA (Firebase)
 // ============================================================
-function getPresupuestos() {
+function getPresupuestos(modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
 
     var docs         = firestoreGetAll_(CONFIG.COLLECTION_PRESUPUESTOS);
-    var presupuestos = docs.map(function(doc){ return parseFirestoreDoc_(doc); }).filter(Boolean);
+    var presupuestos = docs.map(function(doc){ return parseFirestoreDoc_(doc); }).filter(Boolean)
+      .filter(function(p){ return p.usuario_id === user.email; });
     return { success: true, presupuestos: presupuestos };
   } catch (e) {
-
-    return { success: false, error: e.toString() };
+    return { success: false, error: e.toString() };
   }
 }
 
-function guardarPresupuestos(lista) {
+function guardarPresupuestos(lista, modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
     if (!lista || !lista.length) return { success: true };
 
     var existentes = firestoreGetAll_(CONFIG.COLLECTION_PRESUPUESTOS)
-      .map(function(doc){ return parseFirestoreDoc_(doc); }).filter(Boolean);
+      .map(function(doc){ return parseFirestoreDoc_(doc); }).filter(Boolean)
+      .filter(function(e){ return e.usuario_id === user.email; });
 
     lista.forEach(function(item) {
       var monto = parseFloat(item.monto) || 0;
@@ -838,9 +890,8 @@ function guardarPresupuestos(lista) {
         firestoreRequest_('POST', '/' + CONFIG.COLLECTION_PRESUPUESTOS, {
           fields: objectToFirestore_({
             categoria: item.categoria, monto: monto, tipo: tipo,
-            creado_por: user.email, fecha_creacion: new Date().toISOString()
+            creado_por: user.email, fecha_creacion: new Date().toISOString(), usuario_id: user.email
           })
-
         });
       }
     });
@@ -859,6 +910,103 @@ function initializeApp() {
     if (!email) return { success: false, error: 'No autorizado' };
     getUsersSheet_();
     return { success: true, message: 'Aplicacion inicializada' };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+// ============================================================
+//  CUENTA DEMO - datos de ejemplo compartidos
+// ============================================================
+// Todas las colecciones de la cuenta demo, en el orden en que se limpian.
+var COLECCIONES_DEMO_ = [
+  'COLLECTION_CUENTAS', 'COLLECTION_INGRESOS', 'COLLECTION_GASTOS',
+  'COLLECTION_GASTOS_PERIODO', 'COLLECTION_HISTORIAL_PERIODO',
+  'COLLECTION_PRESUPUESTOS', 'COLLECTION_TRANSFERENCIAS'
+];
+
+function limpiarDemo_() {
+  COLECCIONES_DEMO_.forEach(function(key) {
+    var col = CONFIG[key];
+    firestoreGetAll_(col).forEach(function(doc) {
+      var obj = parseFirestoreDoc_(doc);
+      if (obj && obj.usuario_id === CONFIG.DEMO_USER_ID) {
+        firestoreRequest_('DELETE', '/' + col + '/' + obj.id);
+      }
+    });
+  });
+}
+
+function seedDemoData_() {
+  var ahora = new Date().toISOString();
+  var demo  = CONFIG.DEMO_USER_ID;
+
+  function crear(col, fields) {
+    fields.usuario_id  = demo;
+    fields.creado_por  = demo;
+    var resp = firestoreRequest_('POST', '/' + col, { fields: objectToFirestore_(fields) });
+    return resp.name ? resp.name.split('/').pop() : null;
+  }
+
+  var cuentaId = crear(CONFIG.COLLECTION_CUENTAS, {
+    nombre: 'Cuenta Principal', saldo: 1250.50, icono: '🏦', color: '#4f46e5',
+    tipo: 'corriente', notas: '', activo: true, fecha_creacion: ahora
+  });
+  crear(CONFIG.COLLECTION_CUENTAS, {
+    nombre: 'Ahorros', saldo: 3400, icono: '🐷', color: '#10b981',
+    tipo: 'ahorro', notas: '', activo: true, fecha_creacion: ahora
+  });
+
+  crear(CONFIG.COLLECTION_INGRESOS, {
+    nombre: 'Salario', monto: 900, frecuencia: 'Bisemanal', dia_cobro: 15,
+    cuenta_destino: 'Cuenta Principal', cuenta_destino_id: cuentaId,
+    activo_recurrente: true, notas: '', activo: true, fecha_creacion: ahora
+  });
+
+  var gastosDemo = [
+    { nombre: 'Renta',         monto: 450, dia_vence: 1,  categoria: 'Vivienda' },
+    { nombre: 'Luz',           monto: 60,  dia_vence: 10, categoria: 'Servicios' },
+    { nombre: 'Internet',      monto: 40,  dia_vence: 12, categoria: 'Internet' },
+    { nombre: 'Supermercado',  monto: 180, dia_vence: 20, categoria: 'Alimentacion' },
+    { nombre: 'Telefono',      monto: 35,  dia_vence: 18, categoria: 'Telefono' }
+  ];
+  gastosDemo.forEach(function(g) {
+    crear(CONFIG.COLLECTION_GASTOS, {
+      nombre: g.nombre, monto: g.monto, dia_vence: g.dia_vence, categoria: g.categoria,
+      cuenta: 'Cuenta Principal', cuenta_id: cuentaId, pagado: false, fecha_pago: '',
+      recurrente: true, notas: '', activo: true, fecha_creacion: ahora
+    });
+  });
+
+  var presupuestosDemo = { Vivienda: 500, Servicios: 80, Internet: 50, Alimentacion: 220, Telefono: 50 };
+  Object.keys(presupuestosDemo).forEach(function(cat) {
+    crear(CONFIG.COLLECTION_PRESUPUESTOS, { categoria: cat, monto: presupuestosDemo[cat], tipo: 'main', fecha_creacion: ahora });
+  });
+}
+
+// Se llama al presionar "Ver Demo" en la pantalla de inicio. Si la cuenta
+// demo compartida esta vacia (nadie la ha usado o alguien la vacio), la
+// siembra con datos de ejemplo antes de mostrarla.
+function entrarModoDemo() {
+  try {
+    var cuentas = firestoreGetAll_(CONFIG.COLLECTION_CUENTAS)
+      .map(function(doc){ return parseFirestoreDoc_(doc); })
+      .filter(function(c){ return c && c.usuario_id === CONFIG.DEMO_USER_ID; });
+    if (!cuentas.length) seedDemoData_();
+    return getProfile(true);
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+// Boton "Reiniciar Demo": borra lo que haya y siembra datos de ejemplo
+// frescos. Cualquier visitante en modo demo puede usarlo si la demo
+// quedo desordenada por otros visitantes.
+function resetearDemo() {
+  try {
+    limpiarDemo_();
+    seedDemoData_();
+    return { success: true, message: 'Demo reiniciada con datos de ejemplo' };
   } catch (e) {
     return { success: false, error: e.toString() };
   }
@@ -896,8 +1044,7 @@ function firestoreRequest_(method, path, payload) {
 
 function firestoreGetAll_(collection) {
   try {
-
-    var result = firestoreRequest_('GET', '/' + collection + '?pageSize=500');
+    var result = firestoreRequest_('GET', '/' + collection + '?pageSize=500');
     return result.documents || [];
   } catch (e) { return []; }
 }
@@ -953,41 +1100,43 @@ function fromFirestoreValue_(fsValue) {
 //  GASTOS DEL PERIODO
 // ============================================================
 
-function getGastosPeriodo() {
+function getGastosPeriodo(modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
     var docs   = firestoreGetAll_(CONFIG.COLLECTION_GASTOS_PERIODO);
     var gastos = docs.map(function(doc){ return parseFirestoreDoc_(doc); })
-                     .filter(function(g){ return g && g.activo !== false; });
+                     .filter(function(g){ return g && g.activo !== false && g.usuario_id === user.email; });
     var total  = gastos.reduce(function(s,g){ return s + (parseFloat(g.monto)||0); }, 0);
     return { success: true, gastos: gastos, total: total };
   } catch(e) { return { success: false, error: e.toString() }; }
 }
 
-function addGastoPeriodo(data) {
+function addGastoPeriodo(data, modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
     var gasto = {
       nombre: data.nombre||'', monto: parseFloat(data.monto)||0,
       categoria: data.categoria||'Otros', cuenta: data.cuenta||'',
       cuenta_id: data.cuenta_id||'', notas: data.notas||'',
       activo: true, fecha: new Date().toISOString().split('T')[0],
-      fecha_creacion: new Date().toISOString(), creado_por: user.email
+      fecha_creacion: new Date().toISOString(), creado_por: user.email,
+      usuario_id: user.email
     };
     var response = firestoreRequest_('POST', '/' + CONFIG.COLLECTION_GASTOS_PERIODO, { fields: objectToFirestore_(gasto) });
     return { success: true, id: response.name ? response.name.split('/').pop() : null };
   } catch(e) { return { success: false, error: e.toString() }; }
 }
 
-function updateGastoPeriodo(id, data) {
+function updateGastoPeriodo(id, data, modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
+    if (!verificarPropietario_(CONFIG.COLLECTION_GASTOS_PERIODO, id, user.email)) return { success: false, error: 'No autorizado para modificar este gasto' };
     var fields = {}, updateFields = [];
 
-    if (data.nombre    !== undefined) { fields.nombre    = toFirestoreValue_(data.nombre);                updateFields.push('nombre'); }
+    if (data.nombre    !== undefined) { fields.nombre    = toFirestoreValue_(data.nombre);                updateFields.push('nombre'); }
     if (data.monto     !== undefined) { fields.monto     = toFirestoreValue_(parseFloat(data.monto)||0); updateFields.push('monto'); }
     if (data.categoria !== undefined) { fields.categoria = toFirestoreValue_(data.categoria);             updateFields.push('categoria'); }
     if (data.cuenta    !== undefined) { fields.cuenta    = toFirestoreValue_(data.cuenta);                updateFields.push('cuenta'); }
@@ -999,41 +1148,45 @@ function updateGastoPeriodo(id, data) {
   } catch(e) { return { success: false, error: e.toString() }; }
 }
 
-function deleteGastoPeriodo(id) {
+function deleteGastoPeriodo(id, modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
+    if (!verificarPropietario_(CONFIG.COLLECTION_GASTOS_PERIODO, id, user.email)) return { success: false, error: 'No autorizado para eliminar este gasto' };
     firestoreRequest_('PATCH',
       '/' + CONFIG.COLLECTION_GASTOS_PERIODO + '/' + id + '?updateMask.fieldPaths=activo',
       { fields: { activo: toFirestoreValue_(false) } }
     );
     return { success: true };
   } catch(e) { return { success: false, error: e.toString() }; }
-
 }
 
-function getHistorialPeriodos() {
+function getHistorialPeriodos(modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
     var docs = firestoreGetAll_(CONFIG.COLLECTION_HISTORIAL_PERIODO);
-    var historial = docs.map(function(doc){ return parseFirestoreDoc_(doc); }).filter(Boolean);
+    var historial = docs.map(function(doc){ return parseFirestoreDoc_(doc); }).filter(Boolean)
+      .filter(function(h){ return h.usuario_id === user.email; });
     historial.sort(function(a,b){ return new Date(b.fecha_inicio||0) - new Date(a.fecha_inicio||0); });
     return { success: true, historial: historial };
   } catch(e) { return { success: false, error: e.toString() }; }
 }
 
-function reiniciarPeriodo(ingresoCobro) {
+function reiniciarPeriodo(ingresoCobro, modoDemo) {
   try {
-    var user = getCurrentUser();
+    var user = resolveContext_(modoDemo);
     if (!user.authenticated) return { success: false, error: user.error };
 
     var ingreso = parseFloat(ingresoCobro) || 0;
-    var docs    = firestoreGetAll_(CONFIG.COLLECTION_GASTOS_PERIODO);
+    var docsAll = firestoreGetAll_(CONFIG.COLLECTION_GASTOS_PERIODO);
+    var docs    = docsAll.filter(function(doc){ var p = parseFirestoreDoc_(doc); return p && p.usuario_id === user.email; });
     var gastos  = docs.map(function(doc){ return parseFirestoreDoc_(doc); }).filter(Boolean);
 
-    // Contar cobros existentes para numerar
-    var cobrosExistentes = firestoreGetAll_(CONFIG.COLLECTION_HISTORIAL_PERIODO);
+    // Contar cobros existentes para numerar (solo de este usuario)
+    var cobrosExistentes = firestoreGetAll_(CONFIG.COLLECTION_HISTORIAL_PERIODO)
+      .map(function(doc){ return parseFirestoreDoc_(doc); })
+      .filter(function(h){ return h && h.usuario_id === user.email; });
     var numeroCobro = cobrosExistentes.length + 1;
 
     if (gastos.length > 0) {
@@ -1054,7 +1207,8 @@ function reiniciarPeriodo(ingresoCobro) {
           ahorro:          ingreso - total,
           numero_cobro:    numeroCobro,
           cerrado_por:     user.email,
-          fecha_cierre:    new Date().toISOString()
+          fecha_cierre:    new Date().toISOString(),
+          usuario_id:      user.email
         })
       });
     }
@@ -1075,10 +1229,10 @@ function reiniciarPeriodo(ingresoCobro) {
     var presDocs = firestoreGetAll_(CONFIG.COLLECTION_PRESUPUESTOS);
     presDocs.forEach(function(doc) {
       var pre = parseFirestoreDoc_(doc);
-      if (pre && pre.id) {
+      if (pre && pre.id && pre.usuario_id === user.email) {
         firestoreRequest_('PATCH',
 
-          '/' + CONFIG.COLLECTION_PRESUPUESTOS + '/' + pre.id + '?updateMask.fieldPaths=monto',
+          '/' + CONFIG.COLLECTION_PRESUPUESTOS + '/' + pre.id + '?updateMask.fieldPaths=monto',
           { fields: { monto: toFirestoreValue_(0) } }
         );
       }
