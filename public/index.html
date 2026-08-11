@@ -83,7 +83,7 @@
   .progress-fill{height:100%;border-radius:4px;transition:width .3s}
   .mo{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px}
 
-  .mo.open{display:flex}
+  .mo.open{display:flex}
   .md{background:var(--bg2);border-radius:12px;max-width:600px;width:100%;max-height:90vh;display:flex;flex-direction:column}
   .mh{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
   .mh h3{font-size:16px}
@@ -148,8 +148,22 @@
         <button class="btn bp landing-btn" id="landing-demo-btn" onclick="entrarDemo()">🚀 Ver Demo (sin registrarte)</button>
         <p class="landing-hint">Datos de ejemplo compartidos, solo para explorar la aplicacion. No es tu informacion real.</p>
         <div style="height:14px"></div>
-        <button class="btn bs landing-btn" id="landing-real-btn" onclick="entrarReal()">Entrar con mi cuenta</button>
+        <button class="btn bs landing-btn" id="landing-toggle-btn" onclick="mostrarFormularioCuenta()">Entrar con mi cuenta</button>
         <p class="landing-hint">Cada cuenta ve unicamente su propia informacion, nunca la de otro usuario.</p>
+
+        <div id="auth-form" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:16px">
+          <div class="form-grid" style="grid-template-columns:1fr">
+            <div class="fg"><label>Email</label><input type="email" id="auth-email" placeholder="tu@email.com"></div>
+            <div class="fg" id="auth-nombre-wrap" style="display:none"><label>Nombre</label><input type="text" id="auth-nombre" placeholder="Tu nombre"></div>
+            <div class="fg"><label>Contrasena</label><input type="password" id="auth-password" placeholder="Minimo 6 caracteres"></div>
+          </div>
+          <p id="auth-error" style="display:none;color:var(--red);font-size:12px;margin-top:8px"></p>
+          <button class="btn bp landing-btn" id="auth-submit-btn" style="margin-top:14px" onclick="submitAuth()">Iniciar sesion</button>
+          <p class="landing-hint" style="text-align:center;margin-top:10px">
+            <span id="auth-toggle-text">¿No tienes cuenta?</span>
+            <a href="#" id="auth-toggle-link" onclick="toggleAuthMode();return false;" style="color:var(--cyan)">Crear una</a>
+          </p>
+        </div>
       </div>
     </div>
   </div>
@@ -161,7 +175,7 @@
         <span class="demo-badge" id="demo-badge">MODO DEMO</span>
         <button class="theme-btn demo-action-btn" id="demo-reset-btn" onclick="reiniciarDemoUI()" title="Reiniciar datos de demo">&#8635; Reiniciar</button>
         <button class="theme-btn demo-action-btn" id="demo-exit-btn" onclick="salirDemo()" title="Salir de la demo">Salir demo</button>
-        <button class="theme-btn" id="init-app-btn" onclick="initializeAppUI()" title="Inicializar App" style="color:var(--gold)">&#9881;</button>
+        <button class="theme-btn demo-action-btn" id="logout-btn" onclick="cerrarSesion()" title="Cerrar sesion">Salir</button>
         <button class="theme-btn" onclick="toggleTheme()" title="Cambiar tema">&#9788;</button>
         <div class="user-info">
           <div class="user-name"><span id="user-display-name">Cargando...</span><small id="user-email"></small></div>
@@ -203,7 +217,7 @@
             <span id="budget-percent" style="font-weight:700;font-size:18px">0%</span>
           </div>
 
-          <div class="progress-bar"><div class="progress-fill" id="budget-bar" style="width:0%;background:var(--green)"></div></div>
+          <div class="progress-bar"><div class="progress-fill" id="budget-bar" style="width:0%;background:var(--green)"></div></div>
           <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--text2)">
             <span>Pagado: <strong id="stat-pagado" style="color:var(--green)">$0.00</strong></span>
             <span>Pendiente: <strong id="stat-pendiente" style="color:var(--gold)">$0.00</strong></span>
@@ -293,7 +307,7 @@
           <div class="stat"><div class="stat-label">Cantidad de Gastos</div><div class="stat-value cyan" id="periodo-count">0</div></div>
           <div class="stat"><div class="stat-label">Cobro Actual</div><div class="stat-value green" id="periodo-cobro-num">Cobro 1</div></div>
 
-        </div>
+        </div>
         <div class="card">
           <div class="tw">
             <table>
@@ -384,7 +398,7 @@
                 <button class="btn btn-sm bs" id="btn-s2" onclick="cambiarVistaBarras('c2')">Cobro 2</button>
                 <button class="btn btn-sm bs" id="btn-mes" onclick="cambiarVistaBarras('mes')">Mes</button>
 
-              </div>
+              </div>
             </div>
             <div style="display:flex;gap:16px;margin-bottom:10px;font-size:12px;flex-wrap:wrap">
               <span>Gastado: <strong id="barras-gastado" style="color:var(--gold)">$0.00</strong></span>
@@ -474,14 +488,13 @@
       <button class="calc-key op" onclick="calcAction('+')">+</button>
       <button class="calc-key num" onclick="calcAction('0')" style="grid-column:span 2">0</button>
 
-      <button class="calc-key num" onclick="calcAction('.')">.</button>
+      <button class="calc-key num" onclick="calcAction('.')">.</button>
       <button class="calc-key eq" onclick="calcAction('=')">=</button>
     </div>
   </div>
 
   <script>
   var USER=null,CUENTAS=[],INGRESOS=[],GASTOS=[],CATEGORIAS=[],GASTOS_PERIODO=[];
-  var MODO_DEMO=false;
   var ICONOS_CUENTA=['🏦','💳','💰','🐷','💵','🏧','📊','👛'];
   var COLORES_CUENTA=['#4f46e5','#22c55e','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#64748b'];
   var ICONOS_GASTO={'Vivienda':'🏠','Servicios':'💡','Alimentación':'🍽️','Alimentacion':'🍽️','Transporte':'🚗','Salud':'🏥','Entretenimiento':'🎬','Educación':'📚','Educacion':'📚','Ahorro':'💰','Otros':'📦','Tarjetas':'💳','Prestamos':'🏦','Telefono':'📱','Internet':'🌐'};
@@ -493,63 +506,89 @@
   var COBROS_EN_MES = 2; // default bisemanal
 
   document.addEventListener('DOMContentLoaded',init);
-  function init(){loadTheme();}
+  function init(){loadTheme();comprobarSesion();}
 
-  // -- Pantalla de inicio: demo compartida vs cuenta real --
-  function entrarDemo(){
-    document.getElementById('landing-demo-btn').disabled=true;
-    document.getElementById('landing-real-btn').disabled=true;
-    toast('Cargando demo...','ok');
-    google.script.run.withSuccessHandler(function(r){
-      if(r&&r.success){
-        MODO_DEMO=true;
-        aplicarPerfil(r.profile);
-      }else{
-        toast('Error: '+(r&&r.error),'err');
-        document.getElementById('landing-demo-btn').disabled=false;
-        document.getElementById('landing-real-btn').disabled=false;
-      }
-    }).withFailureHandler(function(e){
-      toast('Error: '+e.message,'err');
-      document.getElementById('landing-demo-btn').disabled=false;
-      document.getElementById('landing-real-btn').disabled=false;
-    }).entrarModoDemo();
+  // ============================================================
+  //  CLIENTE HTTP - reemplaza google.script.run por fetch() real
+  // ============================================================
+  function api(method,url,body){
+    return fetch(url,{
+      method:method,
+      headers:body!==undefined?{'Content-Type':'application/json'}:undefined,
+      body:body!==undefined?JSON.stringify(body):undefined,
+      credentials:'same-origin'
+    }).then(function(r){
+      return r.json().then(function(data){ return data; }).catch(function(){ return {success:false,error:'Respuesta invalida del servidor ('+r.status+')'}; });
+    }).catch(function(e){
+      return {success:false,error:'No se pudo conectar con el servidor: '+e.message};
+    });
   }
 
-  function entrarReal(){
+  // Si ya hay una sesion valida (cookie), entra directo a la app.
+  function comprobarSesion(){
+    api('GET','/api/auth/me').then(function(r){
+      if(r&&r.success)aplicarPerfil(r.profile);
+    });
+  }
+
+  // -- Pantalla de inicio: demo compartida, login o registro --
+  function entrarDemo(){
     document.getElementById('landing-demo-btn').disabled=true;
-    document.getElementById('landing-real-btn').disabled=true;
-    MODO_DEMO=false;
-    loadProfile();
+    toast('Cargando demo...','ok');
+    api('POST','/api/demo/enter').then(function(r){
+      document.getElementById('landing-demo-btn').disabled=false;
+      if(r&&r.success)aplicarPerfil(r.profile);
+      else toast('Error: '+(r&&r.error),'err');
+    });
+  }
+
+  var AUTH_MODE='login';
+  function mostrarFormularioCuenta(){
+    document.getElementById('auth-form').style.display='block';
+    document.getElementById('landing-toggle-btn').style.display='none';
+    document.getElementById('auth-email').focus();
+  }
+  function toggleAuthMode(){
+    AUTH_MODE=AUTH_MODE==='login'?'signup':'login';
+    var esLogin=AUTH_MODE==='login';
+    document.getElementById('auth-nombre-wrap').style.display=esLogin?'none':'';
+    document.getElementById('auth-submit-btn').textContent=esLogin?'Iniciar sesion':'Crear cuenta';
+    document.getElementById('auth-toggle-text').textContent=esLogin?'¿No tienes cuenta?':'¿Ya tienes cuenta?';
+    document.getElementById('auth-toggle-link').textContent=esLogin?'Crear una':'Iniciar sesion';
+    document.getElementById('auth-error').style.display='none';
+  }
+  function submitAuth(){
+    var email=document.getElementById('auth-email').value.trim();
+    var password=document.getElementById('auth-password').value;
+    var nombre=document.getElementById('auth-nombre').value.trim();
+    var errEl=document.getElementById('auth-error');
+    errEl.style.display='none';
+    if(!email||!password){errEl.textContent='Ingresa tu email y contrasena.';errEl.style.display='block';return;}
+    var btn=document.getElementById('auth-submit-btn');
+    btn.disabled=true;
+    var url=AUTH_MODE==='login'?'/api/auth/login':'/api/auth/signup';
+    api('POST',url,{email:email,password:password,nombre:nombre}).then(function(r){
+      btn.disabled=false;
+      if(r&&r.success){aplicarPerfil(r.profile);}
+      else{errEl.textContent=(r&&r.error)||'No se pudo completar la operacion.';errEl.style.display='block';}
+    });
+  }
+
+  function cerrarSesion(){
+    api('POST','/api/auth/logout').then(function(){location.reload();});
   }
 
   function salirDemo(){
-    location.reload();
+    cerrarSesion();
   }
 
   function reiniciarDemoUI(){
     if(!confirm('¿Reiniciar los datos de la demo? Se perdera lo que hayan cambiado otros visitantes y se restauraran los datos de ejemplo.'))return;
     toast('Reiniciando demo...','ok');
-    google.script.run.withSuccessHandler(function(r){
+    api('POST','/api/demo/reset').then(function(r){
       if(r&&r.success){toast('Demo reiniciada','ok');refreshDashboard();loadCuentas();loadIngresos();loadGastos();loadGastosPeriodo();loadPresupuesto();loadTransferencias();}
       else{toast('Error: '+(r&&r.error),'err');}
-    }).resetearDemo();
-  }
-
-  function loadProfile(){
-    google.script.run.withSuccessHandler(function(r){
-      if(r&&r.success){
-        aplicarPerfil(r.profile);
-      }else{
-        toast('Error: '+(r&&r.error),'err');
-        document.getElementById('landing-demo-btn').disabled=false;
-        document.getElementById('landing-real-btn').disabled=false;
-      }
-    }).withFailureHandler(function(e){
-      toast('Error: '+e.message,'err');
-      document.getElementById('landing-demo-btn').disabled=false;
-      document.getElementById('landing-real-btn').disabled=false;
-    }).getProfile(MODO_DEMO);
+    });
   }
 
   // Muestra la app ya autenticada (real o demo) y oculta la pantalla de inicio.
@@ -562,13 +601,13 @@
     document.getElementById('user-avatar').textContent=USER.nombre.charAt(0).toUpperCase();
     if(USER.isAdmin)document.getElementById('tab-usuarios').style.display='';
     document.getElementById('demo-badge').style.display=USER.isDemo?'inline-flex':'none';
-    document.getElementById('demo-reset-btn').style.display=USER.isDemo?'':'none';
-    document.getElementById('demo-exit-btn').style.display=USER.isDemo?'':'none';
-    document.getElementById('init-app-btn').style.display=USER.isDemo?'none':'';
+    document.getElementById('demo-reset-btn').style.display=USER.isDemo?'inline-flex':'none';
+    document.getElementById('demo-exit-btn').style.display=USER.isDemo?'inline-flex':'none';
+    document.getElementById('logout-btn').style.display=USER.isDemo?'none':'inline-flex';
     loadCategorias();refreshDashboard();
   }
 
-  function loadCategorias(){google.script.run.withSuccessHandler(function(r){if(r.success)CATEGORIAS=r.categorias||[];}).getCategorias();}
+  function loadCategorias(){api('GET','/api/categorias').then(function(r){if(r.success)CATEGORIAS=r.categorias||[];});}
   function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-theme')==='light'?'dark':'light';h.setAttribute('data-theme',n);localStorage.setItem('theme',n);}
   function loadTheme(){var s=localStorage.getItem('theme');if(s)document.documentElement.setAttribute('data-theme',s);}
 
@@ -625,8 +664,8 @@
     if(periodoNum) periodoNum.textContent='Cobro '+COBRO_ACTUAL;
   }
 
-  function refreshDashboard(){
-    google.script.run.withSuccessHandler(function(r){
+  function refreshDashboard(){
+    api('GET','/api/resumen').then(function(r){
       if(r.success){
         var res=r.resumen;
         document.getElementById('stat-total-cuentas').textContent=formatMoney(res.totalCuentas);
@@ -645,7 +684,7 @@
         if(pendCount>0){badge.textContent=pendCount;badge.style.display='inline';}else{badge.style.display='none';}
         renderDashboardCuentas(res.cuentas);renderProximasVencer(res.proximasVencer);
       }else{toast('Error: '+r.error,'err');}
-    }).withFailureHandler(function(e){toast('Error: '+e.message,'err');}).getResumen(MODO_DEMO);
+    });
   }
 
   function renderDashboardCuentas(cuentas){
@@ -664,7 +703,7 @@
     }).join('');
   }
 
-  function loadCuentas(){google.script.run.withSuccessHandler(function(r){if(r.success){CUENTAS=r.cuentas||[];document.getElementById('cuentas-total').textContent=formatMoney(r.total);renderCuentas();}}).getCuentas(MODO_DEMO);}
+  function loadCuentas(){api('GET','/api/cuentas').then(function(r){if(r.success){CUENTAS=r.cuentas||[];document.getElementById('cuentas-total').textContent=formatMoney(r.total);renderCuentas();}});}
   function renderCuentas(){
     var c=document.getElementById('cuentas-list');
     if(!CUENTAS.length){c.innerHTML='<p style="color:var(--text2);text-align:center;padding:40px;grid-column:1/-1">No hay cuentas registradas.</p>';return;}
@@ -682,7 +721,7 @@
     var data={nombre:document.getElementById('cuenta-nombre').value,tipo:document.getElementById('cuenta-tipo').value,saldo:parseFloat(document.getElementById('cuenta-saldo').value)||0,icono:document.getElementById('cuenta-icono').value,color:document.getElementById('cuenta-color').value,notas:document.getElementById('cuenta-notas').value};
     if(!data.nombre){toast('Ingrese el nombre','err');return;}
     toast('Guardando...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Cuenta creada','ok');loadCuentas();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).addCuenta(data,MODO_DEMO);
+    api('POST','/api/cuentas',data).then(function(r){if(r.success){closeModal();toast('Cuenta creada','ok');loadCuentas();refreshDashboard();}else{toast('Error: '+r.error,'err');}});
   }
   function openEditCuentaModal(id){
     var x=CUENTAS.find(function(c){return c.id===id;});if(!x)return;
@@ -695,13 +734,13 @@
   function updateCuentaSubmit(id){
     var data={nombre:document.getElementById('cuenta-nombre').value,tipo:document.getElementById('cuenta-tipo').value,saldo:parseFloat(document.getElementById('cuenta-saldo').value)||0,icono:document.getElementById('cuenta-icono').value,color:document.getElementById('cuenta-color').value,notas:document.getElementById('cuenta-notas').value};
     toast('Guardando...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Cuenta actualizada','ok');loadCuentas();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).updateCuenta(id,data,MODO_DEMO);
+    api('PUT','/api/cuentas/'+id,data).then(function(r){if(r.success){closeModal();toast('Cuenta actualizada','ok');loadCuentas();refreshDashboard();}else{toast('Error: '+r.error,'err');}});
   }
   function confirmDeleteCuenta(id,nombre){openModal('Eliminar Cuenta','<p>¿Eliminar la cuenta <strong>'+esc(nombre)+'</strong>?</p>','<button class="btn bs" onclick="closeModal()">Cancelar</button><button class="btn br" onclick="deleteCuentaConfirm(\''+id+'\')">Eliminar</button>');}
-  function deleteCuentaConfirm(id){google.script.run.withSuccessHandler(function(r){closeModal();if(r.success){toast('Cuenta eliminada','ok');loadCuentas();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).deleteCuenta(id,MODO_DEMO);}
+  function deleteCuentaConfirm(id){api('DELETE','/api/cuentas/'+id).then(function(r){closeModal();if(r.success){toast('Cuenta eliminada','ok');loadCuentas();refreshDashboard();}else{toast('Error: '+r.error,'err');}});}
 
   function loadIngresos(){
-    google.script.run.withSuccessHandler(function(r){
+    api('GET','/api/ingresos').then(function(r){
       if(r.success){
         INGRESOS=r.ingresos||[];
         document.getElementById('ingresos-total').textContent=formatMoney(r.totalMensual);
@@ -709,13 +748,13 @@
 
         actualizarInfoFrecuencia();
       }
-    }).getIngresos(MODO_DEMO);
+    });
   }
   function renderIngresos(){
     var tbody=document.getElementById('ingresos-table');
     if(!INGRESOS.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text2)">No hay ingresos</td></tr>';return;}
 
-    tbody.innerHTML=INGRESOS.map(function(i){return '<tr><td><strong>'+esc(i.nombre)+'</strong>'+(i.notas?'<br><small style="color:var(--text2)">'+esc(i.notas)+'</small>':'')+'</td><td style="color:var(--green);font-weight:600">'+formatMoney(i.monto)+'</td><td>'+esc(i.frecuencia||'Mensual')+'</td><td>Dia '+(i.dia_cobro||1)+'</td><td>'+esc(i.cuenta_destino||'-')+'</td><td><span class="status '+(i.activo_recurrente?'pagado':'pendiente')+'">'+(i.activo_recurrente?'Activo':'Inactivo')+'</span></td><td style="display:flex;gap:6px"><button class="btn btn-sm bs" onclick="openEditIngresoModal(\''+i.id+'\')">Editar</button><button class="btn btn-sm br" onclick="confirmDeleteIngreso(\''+i.id+'\')">Eliminar</button></td></tr>';}).join('');
+    tbody.innerHTML=INGRESOS.map(function(i){return '<tr><td><strong>'+esc(i.nombre)+'</strong>'+(i.notas?'<br><small style="color:var(--text2)">'+esc(i.notas)+'</small>':'')+'</td><td style="color:var(--green);font-weight:600">'+formatMoney(i.monto)+'</td><td>'+esc(i.frecuencia||'Mensual')+'</td><td>Dia '+(i.dia_cobro||1)+'</td><td>'+esc(i.cuenta_destino||'-')+'</td><td><span class="status '+(i.activo_recurrente?'pagado':'pendiente')+'">'+(i.activo_recurrente?'Activo':'Inactivo')+'</span></td><td style="display:flex;gap:6px"><button class="btn btn-sm bs" onclick="openEditIngresoModal(\''+i.id+'\')">Editar</button><button class="btn btn-sm br" onclick="confirmDeleteIngreso(\''+i.id+'\')">Eliminar</button></td></tr>';}).join('');
   }
   function openAddIngresoModal(){
     var cOpts='<option value="">Seleccionar cuenta...</option>'+CUENTAS.map(function(c){return '<option value="'+c.id+'" data-nombre="'+esc(c.nombre)+'">'+(c.icono||'🏦')+' '+esc(c.nombre)+'</option>';}).join('');
@@ -736,7 +775,7 @@
     var data={nombre:document.getElementById('ingreso-nombre').value,monto:parseFloat(document.getElementById('ingreso-monto').value)||0,frecuencia:document.getElementById('ingreso-frecuencia').value,dia_cobro:parseInt(document.getElementById('ingreso-dia').value)||1,cuenta_destino_id:cs.value,cuenta_destino:co&&co.dataset.nombre?co.dataset.nombre:'',activo_recurrente:document.getElementById('ingreso-activo').checked,notas:document.getElementById('ingreso-notas').value};
     if(!data.nombre){toast('Ingrese el nombre','err');return;}
     toast('Guardando...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Ingreso creado','ok');loadIngresos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).addIngreso(data,MODO_DEMO);
+    api('POST','/api/ingresos',data).then(function(r){if(r.success){closeModal();toast('Ingreso creado','ok');loadIngresos();refreshDashboard();}else{toast('Error: '+r.error,'err');}});
   }
   function openEditIngresoModal(id){
     var i=INGRESOS.find(function(x){return x.id===id;});if(!i)return;
@@ -749,12 +788,12 @@
     var cs=document.getElementById('ingreso-cuenta'),co=cs.options[cs.selectedIndex];
     var data={nombre:document.getElementById('ingreso-nombre').value,monto:parseFloat(document.getElementById('ingreso-monto').value)||0,frecuencia:document.getElementById('ingreso-frecuencia').value,dia_cobro:parseInt(document.getElementById('ingreso-dia').value)||1,cuenta_destino_id:cs.value,cuenta_destino:co&&co.dataset.nombre?co.dataset.nombre:'',activo_recurrente:document.getElementById('ingreso-activo').checked,notas:document.getElementById('ingreso-notas').value};
     toast('Guardando...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Ingreso actualizado','ok');loadIngresos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).updateIngreso(id,data,MODO_DEMO);
+    api('PUT','/api/ingresos/'+id,data).then(function(r){if(r.success){closeModal();toast('Ingreso actualizado','ok');loadIngresos();refreshDashboard();}else{toast('Error: '+r.error,'err');}});
   }
   function confirmDeleteIngreso(id){openModal('Eliminar Ingreso','<p>¿Eliminar este ingreso?</p>','<button class="btn bs" onclick="closeModal()">Cancelar</button><button class="btn br" onclick="deleteIngresoConfirm(\''+id+'\')">Eliminar</button>');}
-  function deleteIngresoConfirm(id){google.script.run.withSuccessHandler(function(r){closeModal();if(r.success){toast('Ingreso eliminado','ok');loadIngresos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).deleteIngreso(id,MODO_DEMO);}
+  function deleteIngresoConfirm(id){api('DELETE','/api/ingresos/'+id).then(function(r){closeModal();if(r.success){toast('Ingreso eliminado','ok');loadIngresos();refreshDashboard();}else{toast('Error: '+r.error,'err');}});}
 
-  function loadGastos(){google.script.run.withSuccessHandler(function(r){if(r.success){GASTOS=r.gastos||[];document.getElementById('gastos-total').textContent=formatMoney(r.totalFacturas);document.getElementById('gastos-pagado').textContent=formatMoney(r.totalPagado);document.getElementById('gastos-pendiente').textContent=formatMoney(r.totalPendiente);renderGastos();}}).getGastos(MODO_DEMO);}
+  function loadGastos(){api('GET','/api/gastos').then(function(r){if(r.success){GASTOS=r.gastos||[];document.getElementById('gastos-total').textContent=formatMoney(r.totalFacturas);document.getElementById('gastos-pagado').textContent=formatMoney(r.totalPagado);document.getElementById('gastos-pendiente').textContent=formatMoney(r.totalPendiente);renderGastos();}});}
   function renderGastos(){
     var tbody=document.getElementById('gastos-table');
     if(!GASTOS.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text2)">No hay gastos</td></tr>';return;}
@@ -787,7 +826,7 @@
     var data={nombre:document.getElementById('gasto-nombre').value,monto:parseFloat(document.getElementById('gasto-monto').value)||0,dia_vence:parseInt(document.getElementById('gasto-dia').value)||1,categoria:document.getElementById('gasto-categoria').value,cuenta_id:cs.value,cuenta:co&&co.dataset.nombre?co.dataset.nombre:'',recurrente:document.getElementById('gasto-recurrente').checked,pagado:false,notas:document.getElementById('gasto-notas').value};
     if(!data.nombre){toast('Ingrese el nombre','err');return;}
     toast('Guardando...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Gasto creado','ok');loadGastos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).addGasto(data,MODO_DEMO);
+    api('POST','/api/gastos',data).then(function(r){if(r.success){closeModal();toast('Gasto creado','ok');loadGastos();refreshDashboard();}else{toast('Error: '+r.error,'err');}});
   }
   function openEditGastoModal(id){
     var g=GASTOS.find(function(x){return x.id===id;});if(!g)return;
@@ -800,30 +839,30 @@
     var cs=document.getElementById('gasto-cuenta'),co=cs.options[cs.selectedIndex];
     var data={nombre:document.getElementById('gasto-nombre').value,monto:parseFloat(document.getElementById('gasto-monto').value)||0,dia_vence:parseInt(document.getElementById('gasto-dia').value)||1,categoria:document.getElementById('gasto-categoria').value,cuenta_id:cs.value,cuenta:co&&co.dataset.nombre?co.dataset.nombre:'',recurrente:document.getElementById('gasto-recurrente').checked,notas:document.getElementById('gasto-notas').value};
     toast('Guardando...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Gasto actualizado','ok');loadGastos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).updateGasto(id,data,MODO_DEMO);
+    api('PUT','/api/gastos/'+id,data).then(function(r){if(r.success){closeModal();toast('Gasto actualizado','ok');loadGastos();refreshDashboard();}else{toast('Error: '+r.error,'err');}});
   }
   function toggleGastoPagado(id,pagado){
     toast(pagado?'Marcando como pagado...':'Desmarcando...','ok');
 
-    google.script.run.withSuccessHandler(function(r){
+    api('POST','/api/gastos/'+id+'/pagado',{pagado:pagado}).then(function(r){
       if(r.success){
         toast(pagado?'✅ Pagado y copiado al Periodo':'Desmarcado','ok');
         loadGastos();loadCuentas();refreshDashboard();
         if(pagado) loadPresupuesto();
       }else{toast('Error: '+r.error,'err');}
-    }).marcarGastoPagado(id,pagado,MODO_DEMO);
+    });
   }
   function confirmDeleteGasto(id){openModal('Eliminar Gasto','<p>¿Eliminar este gasto?</p>','<button class="btn bs" onclick="closeModal()">Cancelar</button><button class="btn br" onclick="deleteGastoConfirm(\''+id+'\')">Eliminar</button>');}
-  function deleteGastoConfirm(id){google.script.run.withSuccessHandler(function(r){closeModal();if(r.success){toast('Gasto eliminado','ok');loadGastos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).deleteGasto(id,MODO_DEMO);}
+  function deleteGastoConfirm(id){api('DELETE','/api/gastos/'+id).then(function(r){closeModal();if(r.success){toast('Gasto eliminado','ok');loadGastos();refreshDashboard();}else{toast('Error: '+r.error,'err');}});}
   function resetearFacturas(){openModal('Resetear Facturas','<p>Desmarcara todas las facturas recurrentes como NO pagadas para el nuevo mes.</p><p style="color:var(--gold);margin-top:12px">¿Continuar?</p>','<button class="btn bs" onclick="closeModal()">Cancelar</button><button class="btn br" onclick="doResetearFacturas()">Resetear</button>');}
-  function doResetearFacturas(){toast('Reseteando...','ok');google.script.run.withSuccessHandler(function(r){closeModal();if(r.success){toast('Se resetearon '+r.count+' facturas','ok');loadGastos();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).resetearFacturasMes(MODO_DEMO);}
+  function doResetearFacturas(){toast('Reseteando...','ok');api('POST','/api/gastos/resetear-mes').then(function(r){closeModal();if(r.success){toast('Se resetearon '+r.count+' facturas','ok');loadGastos();refreshDashboard();}else{toast('Error: '+r.error,'err');}});}
 
   // ============================================================
   // GASTOS DEL PERIODO
 
   // ============================================================
   function loadGastosPeriodo(){
-    google.script.run.withSuccessHandler(function(r){
+    api('GET','/api/gastos-periodo').then(function(r){
       if(r.success){
         GASTOS_PERIODO=r.gastos||[];
         document.getElementById('periodo-total').textContent=formatMoney(r.total);
@@ -834,7 +873,7 @@
         renderGastosPeriodo();
         loadHistorialPeriodos();
       }
-    }).getGastosPeriodo(MODO_DEMO);
+    });
   }
   function renderGastosPeriodo(){
     var tbody=document.getElementById('periodo-table');
@@ -865,7 +904,7 @@
     var data={nombre:document.getElementById('gp-nombre').value,monto:parseFloat(document.getElementById('gp-monto').value)||0,categoria:document.getElementById('gp-categoria').value,cuenta_id:cs.value,cuenta:co&&co.dataset.nombre?co.dataset.nombre:'',notas:document.getElementById('gp-notas').value};
     if(!data.nombre){toast('Ingrese el nombre','err');return;}
     toast('Guardando...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Gasto registrado','ok');loadGastosPeriodo();loadPresupuesto();}else{toast('Error: '+r.error,'err');}}).addGastoPeriodo(data,MODO_DEMO);
+    api('POST','/api/gastos-periodo',data).then(function(r){if(r.success){closeModal();toast('Gasto registrado','ok');loadGastosPeriodo();loadPresupuesto();}else{toast('Error: '+r.error,'err');}});
   }
   function openEditGastoPeriodoModal(id){
     var g=GASTOS_PERIODO.find(function(x){return x.id===id;});if(!g)return;
@@ -879,15 +918,15 @@
 
     var data={nombre:document.getElementById('gp-nombre').value,monto:parseFloat(document.getElementById('gp-monto').value)||0,categoria:document.getElementById('gp-categoria').value,cuenta_id:cs.value,cuenta:co&&co.dataset.nombre?co.dataset.nombre:'',notas:document.getElementById('gp-notas').value};
     toast('Guardando...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Gasto actualizado','ok');loadGastosPeriodo();loadPresupuesto();}else{toast('Error: '+r.error,'err');}}).updateGastoPeriodo(id,data,MODO_DEMO);
+    api('PUT','/api/gastos-periodo/'+id,data).then(function(r){if(r.success){closeModal();toast('Gasto actualizado','ok');loadGastosPeriodo();loadPresupuesto();}else{toast('Error: '+r.error,'err');}});
   }
   function confirmDeleteGastoPeriodo(id){openModal('Eliminar Gasto','<p>¿Eliminar este gasto del periodo?</p>','<button class="btn bs" onclick="closeModal()">Cancelar</button><button class="btn br" onclick="deleteGastoPeriodoConfirm(\''+id+'\')">Eliminar</button>');}
-  function deleteGastoPeriodoConfirm(id){google.script.run.withSuccessHandler(function(r){closeModal();if(r.success){toast('Gasto eliminado','ok');loadGastosPeriodo();loadPresupuesto();}else{toast('Error: '+r.error,'err');}}).deleteGastoPeriodo(id,MODO_DEMO);}
+  function deleteGastoPeriodoConfirm(id){api('DELETE','/api/gastos-periodo/'+id).then(function(r){closeModal();if(r.success){toast('Gasto eliminado','ok');loadGastosPeriodo();loadPresupuesto();}else{toast('Error: '+r.error,'err');}});}
 
   function loadHistorialPeriodos(){
-    google.script.run.withSuccessHandler(function(r){
+    api('GET','/api/historial-periodo').then(function(r){
       if(r.success)renderHistorialPeriodos(r.historial||[]);
-    }).getHistorialPeriodos(MODO_DEMO);
+    });
   }
   function renderHistorialPeriodos(historial){
     var container=document.getElementById('historial-periodos');
@@ -896,7 +935,7 @@
       var cats=p.por_categoria||{};
       var catRows=Object.keys(cats).map(function(c){return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0"><span style="color:var(--text2)">'+(ICONOS_GASTO[c]||'📦')+' '+esc(c)+'</span><span style="color:var(--gold)">'+formatMoney(cats[c])+'</span></div>';}).join('');
 
-      var cobro=p.numero_cobro||((historial.length-idx));
+      var cobro=p.numero_cobro||((historial.length-idx));
       var ahorro=(parseFloat(p.ingreso_cobro)||0)-(parseFloat(p.total)||0);
       return '<div class="cobro-card">'+
         '<div class="cobro-header">'+
@@ -917,7 +956,7 @@
   // ============================================================
   // TRANSFERENCIAS
   // ============================================================
-  function loadTransferencias(){google.script.run.withSuccessHandler(function(r){if(r.success)renderTransferencias(r.transferencias||[]);}).getTransferencias(100,MODO_DEMO);}
+  function loadTransferencias(){api('GET','/api/transferencias?limit=100').then(function(r){if(r.success)renderTransferencias(r.transferencias||[]);});}
   function renderTransferencias(transferencias){
     var tbody=document.getElementById('transferencias-table');
     if(!transferencias.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text2)">No hay movimientos</td></tr>';return;}
@@ -942,7 +981,7 @@
     if(data.monto<=0){toast('Ingrese un monto valido','err');return;}
     if(data.desde_cuenta_id===data.hacia_cuenta_id){toast('Seleccione cuentas diferentes','err');return;}
     toast('Transfiriendo...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Transferencia completada','ok');loadTransferencias();loadCuentas();refreshDashboard();}else{toast('Error: '+r.error,'err');}}).registrarTransferencia(data,MODO_DEMO);
+    api('POST','/api/transferencias',data).then(function(r){if(r.success){closeModal();toast('Transferencia completada','ok');loadTransferencias();loadCuentas();refreshDashboard();}else{toast('Error: '+r.error,'err');}});
   }
 
   // ============================================================
@@ -951,7 +990,7 @@
   var USUARIOS=[];
   function loadUsuarios(){
     if(!USER||!USER.isAdmin)return;
-    google.script.run.withSuccessHandler(function(r){if(r.success){USUARIOS=r.usuarios||[];renderUsuarios();}else{toast('Error: '+r.error,'err');}}).getAllUsuarios();
+    api('GET','/api/usuarios').then(function(r){if(r.success){USUARIOS=r.usuarios||[];renderUsuarios();}else{toast('Error: '+r.error,'err');}});
   }
   function renderUsuarios(){
     var tbody=document.getElementById('usuarios-table');
@@ -973,22 +1012,16 @@
     var data={email:document.getElementById('usu-email').value.trim(),nombre:document.getElementById('usu-nombre').value.trim(),rol:document.getElementById('usu-rol').value,activo:document.getElementById('usu-activo').value==='true'};
     if(!data.email){toast('Email es requerido','err');return;}
     toast('Guardando...','ok');
-    if(id){google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Usuario actualizado','ok');loadUsuarios();}else{toast('Error: '+r.error,'err');}}).updateUsuario(id,data);}
-    else{google.script.run.withSuccessHandler(function(r){if(r.success){closeModal();toast('Usuario creado','ok');loadUsuarios();}else{toast('Error: '+r.error,'err');}}).createUsuario(data);}
+    if(id){api('PUT','/api/usuarios/'+id,data).then(function(r){if(r.success){closeModal();toast('Usuario actualizado','ok');loadUsuarios();}else{toast('Error: '+r.error,'err');}});}
+    else{api('POST','/api/usuarios',data).then(function(r){if(r.success){closeModal();toast('Usuario creado','ok');loadUsuarios();}else{toast('Error: '+r.error,'err');}});}
   }
   function deleteUsuarioConfirm(id){
     var u=USUARIOS.find(function(x){return x.id===id;});if(!u)return;
-    if(confirm('¿Eliminar usuario "'+u.email+'"?')){google.script.run.withSuccessHandler(function(r){if(r.success){toast('Usuario eliminado','ok');loadUsuarios();}else{toast('Error: '+r.error,'err');}}).deleteUsuario(id);}
+    if(confirm('¿Eliminar usuario "'+u.email+'"?')){api('DELETE','/api/usuarios/'+id).then(function(r){if(r.success){toast('Usuario eliminado','ok');loadUsuarios();}else{toast('Error: '+r.error,'err');}});}
   }
 
   function openModal(title,body,footer){document.getElementById('modal-title').textContent=title;document.getElementById('modal-body').innerHTML=body;document.getElementById('modal-footer').innerHTML=footer;document.getElementById('modal').classList.add('open');}
   function closeModal(){document.getElementById('modal').classList.remove('open');}
-  function initializeAppUI(){
-    if(!confirm('¿Inicializar la aplicacion?'))return;
-
-    toast('Inicializando...','ok');
-    google.script.run.withSuccessHandler(function(r){if(r.success){toast('Inicializado correctamente','ok');setTimeout(function(){location.reload();},1500);}else{toast('Error: '+r.error,'err');}}).withFailureHandler(function(e){toast('Error: '+e.message,'err');}).initializeApp();
-  }
   function toast(msg,type){var e=document.querySelector('.toast');if(e)e.remove();var t=document.createElement('div');t.className='toast '+(type||'ok');t.textContent=msg;document.body.appendChild(t);setTimeout(function(){t.remove();},3000);}
 
   function formatMoney(n){return '$'+(parseFloat(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1059,28 +1092,27 @@
     if(box)box.innerHTML='<div class="loading"><div class="spinner"></div>Cargando...</div>';
     if(box2)box2.innerHTML='<div class="loading"><div class="spinner"></div>Cargando...</div>';
 
-    // Cargar gastos del periodo
-    google.script.run.withSuccessHandler(function(rg){
+    // Cargar gastos del periodo, presupuestos e historial, en cadena
+    api('GET','/api/gastos-periodo').then(function(rg){
       if(rg&&rg.success&&rg.gastos) GASTOS_PERIODO=rg.gastos;
-      // Cargar presupuestos
-      google.script.run.withSuccessHandler(function(rp){
-        PRESUPUESTOS={};PRESUPUESTOS2={};
-        if(rp&&rp.success&&rp.presupuestos){
-          rp.presupuestos.forEach(function(p){
-            if(p.tipo==='negocio') PRESUPUESTOS2[p.categoria]=parseFloat(p.monto)||0;
-            else PRESUPUESTOS[p.categoria]=parseFloat(p.monto)||0;
-          });
-        }
-        // Cargar historial para los cobros
-        google.script.run.withSuccessHandler(function(rh){
-          HISTORIAL_COBROS=rh&&rh.success?rh.historial||[]:[];
-          calcularDatosCobros();
-          actualizarInfoFrecuencia();
-
-          renderPresupuesto();
-        }).withFailureHandler(function(){calcularDatosCobros();renderPresupuesto();}).getHistorialPeriodos(MODO_DEMO);
-      }).withFailureHandler(function(){renderPresupuesto();}).getPresupuestos(MODO_DEMO);
-    }).withFailureHandler(function(){renderPresupuesto();}).getGastosPeriodo(MODO_DEMO);
+      return api('GET','/api/presupuestos');
+    }).then(function(rp){
+      PRESUPUESTOS={};PRESUPUESTOS2={};
+      if(rp&&rp.success&&rp.presupuestos){
+        rp.presupuestos.forEach(function(p){
+          if(p.tipo==='negocio') PRESUPUESTOS2[p.categoria]=parseFloat(p.monto)||0;
+          else PRESUPUESTOS[p.categoria]=parseFloat(p.monto)||0;
+        });
+      }
+      return api('GET','/api/historial-periodo');
+    }).then(function(rh){
+      HISTORIAL_COBROS=rh&&rh.success?rh.historial||[]:[];
+      calcularDatosCobros();
+      actualizarInfoFrecuencia();
+      renderPresupuesto();
+    }).catch(function(){
+      calcularDatosCobros();renderPresupuesto();
+    });
   }
 
   function calcularDatosCobros(){
@@ -1168,7 +1200,7 @@
           '<div class="fg" style="width:150px;margin:0"><input type="number" min="0" step="0.01" data-cat="'+esc(cat)+'" data-tipo="main" value="'+p+'" style="text-align:right"></div>'+
         '</div>'+
 
-        '<div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%;background:'+color+'"></div></div>'+
+        '<div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%;background:'+color+'"></div></div>'+
       '</div>';
     }).join('');
     document.getElementById('pre-cats').innerHTML=rows||'<p style="color:var(--text2);text-align:center;padding:20px">No hay categorias.</p>';
@@ -1220,10 +1252,10 @@
       lista.push({categoria:cat,monto:monto,tipo:tipo||'main'});
     });
     toast('Guardando presupuesto...','ok');
-    google.script.run
-      .withSuccessHandler(function(r){if(r&&r.success){toast('Presupuesto guardado n','ok');calcularDatosCobros();renderPresupuesto();}else{toast((r&&r.error)||'Error al guardar','err');}})
-      .withFailureHandler(function(err){toast('Error: '+err,'err');})
-      .guardarPresupuestos(lista,MODO_DEMO);
+    api('POST','/api/presupuestos',{lista:lista}).then(function(r){
+      if(r&&r.success){toast('Presupuesto guardado ✅','ok');calcularDatosCobros();renderPresupuesto();}
+      else{toast((r&&r.error)||'Error al guardar','err');}
+    });
   }
 
   function confirmarReinicioPresupuesto(){
@@ -1243,22 +1275,19 @@
     closeModal();
     toast('Guardando historial y reiniciando...','ok');
     var f=detectarFrecuencia();
-    google.script.run
-      .withSuccessHandler(function(r){
-        if(r&&r.success){
-          toast('✅ Cobro '+COBRO_ACTUAL+' registrado. '+r.gastosArchivados+' gastos archivados.','ok');
-          GASTOS_PERIODO=[];
-          PRESUPUESTOS={};PRESUPUESTOS2={};
-          DATOS_COBROS={c1:{gastos:{},total:0,ingreso:0,ahorro:0},c2:{gastos:{},total:0,ingreso:0,ahorro:0},mes:{gastos:{},total:0,ingreso:0,ahorro:0}};
-          loadPresupuesto();
-          loadGastosPeriodo();
-        }else{toast('Error: '+(r&&r.error),'err');}
-      })
-      .withFailureHandler(function(err){toast('Error: '+err,'err');})
-      .reiniciarPeriodo(f.monto||0,MODO_DEMO);
+    api('POST','/api/periodo/reiniciar',{ingresoCobro:f.monto||0}).then(function(r){
+      if(r&&r.success){
+        toast('✅ Cobro '+COBRO_ACTUAL+' registrado. '+r.gastosArchivados+' gastos archivados.','ok');
+        GASTOS_PERIODO=[];
+        PRESUPUESTOS={};PRESUPUESTOS2={};
+        DATOS_COBROS={c1:{gastos:{},total:0,ingreso:0,ahorro:0},c2:{gastos:{},total:0,ingreso:0,ahorro:0},mes:{gastos:{},total:0,ingreso:0,ahorro:0}};
+        loadPresupuesto();
+        loadGastosPeriodo();
+      }else{toast('Error: '+(r&&r.error),'err');}
+    });
   }
 
-  function cambiarVistaBarras(vista){
+  function cambiarVistaBarras(vista){
     vistaBarras=vista;
     document.getElementById('btn-s1').className='btn btn-sm '+(vista==='c1'?'bp':'bs');
     document.getElementById('btn-s2').className='btn btn-sm '+(vista==='c2'?'bp':'bs');
@@ -1322,4 +1351,3 @@
 </body>
 </html>
 
-
