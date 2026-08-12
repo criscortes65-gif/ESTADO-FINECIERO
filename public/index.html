@@ -791,7 +791,18 @@
     var tbody=document.getElementById('ingresos-table');
     if(!INGRESOS.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text2)">No hay ingresos</td></tr>';return;}
 
-    tbody.innerHTML=INGRESOS.map(function(i){return '<tr><td><strong>'+esc(i.nombre)+'</strong>'+(i.notas?'<br><small style="color:var(--text2)">'+esc(i.notas)+'</small>':'')+'</td><td style="color:var(--green);font-weight:600">'+formatMoney(i.monto)+'</td><td>'+esc(i.frecuencia||'Mensual')+'</td><td>Dia '+(i.dia_cobro||1)+'</td><td>'+esc(i.cuenta_destino||'-')+'</td><td><span class="status '+(i.activo_recurrente?'pagado':'pendiente')+'">'+(i.activo_recurrente?'Activo':'Inactivo')+'</span></td><td style="display:flex;gap:6px"><button class="btn btn-sm bs" onclick="openEditIngresoModal(\''+i.id+'\')">Editar</button><button class="btn btn-sm br" onclick="confirmDeleteIngreso(\''+i.id+'\')">Eliminar</button></td></tr>';}).join('');
+    tbody.innerHTML=INGRESOS.map(function(i){return '<tr><td><strong>'+esc(i.nombre)+'</strong>'+(i.notas?'<br><small style="color:var(--text2)">'+esc(i.notas)+'</small>':'')+'</td><td style="color:var(--green);font-weight:600">'+formatMoney(i.monto)+'</td><td>'+esc(i.frecuencia||'Mensual')+'</td><td>Dia '+(i.dia_cobro||1)+'</td><td>'+esc(i.cuenta_destino||'-')+'</td><td><span class="status '+(i.activo_recurrente?'pagado':'pendiente')+'">'+(i.activo_recurrente?'Activo':'Inactivo')+'</span></td><td style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-sm bg" onclick="cobrarIngreso(\''+i.id+'\',\''+esc(i.nombre)+'\')" title="Suma el monto a la cuenta destino">💰 Cobrar</button><button class="btn btn-sm bs" onclick="openEditIngresoModal(\''+i.id+'\')">Editar</button><button class="btn btn-sm br" onclick="confirmDeleteIngreso(\''+i.id+'\')">Eliminar</button></td></tr>';}).join('');
+  }
+  function cobrarIngreso(id,nombre){
+    openModal('Registrar Cobro','<p>¿Registrar el cobro de <strong>'+esc(nombre)+'</strong>? El monto se sumara a la cuenta destino.</p>','<button class="btn bs" onclick="closeModal()">Cancelar</button><button class="btn bg" onclick="confirmarCobrarIngreso(\''+id+'\')">Si, cobrar</button>');
+  }
+  function confirmarCobrarIngreso(id){
+    toast('Registrando cobro...','ok');
+    api('POST','/api/ingresos/'+id+'/recibido',{}).then(function(r){
+      closeModal();
+      if(r.success){toast('Cobro registrado ✅','ok');loadCuentas();refreshDashboard();}
+      else{toast('Error: '+r.error,'err');}
+    });
   }
   function openAddIngresoModal(){
     var cOpts='<option value="">Seleccionar cuenta...</option>'+CUENTAS.map(function(c){return '<option value="'+c.id+'" data-nombre="'+esc(c.nombre)+'">'+(c.icono||'🏦')+' '+esc(c.nombre)+'</option>';}).join('');
