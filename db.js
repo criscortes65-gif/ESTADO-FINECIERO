@@ -18,6 +18,8 @@ const pool = new Pool({
 async function ensureSchema() {
   const sql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   await pool.query(sql);
+  const migrations = fs.readFileSync(path.join(__dirname, 'migrations.sql'), 'utf8');
+  await pool.query(migrations);
 }
 
 module.exports = { pool, ensureSchema };

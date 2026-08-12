@@ -49,7 +49,8 @@ function toProfile(u) {
     nombre: u.nombre,
     rol: u.rol,
     isAdmin: u.rol === 'admin',
-    isDemo: u.rol === 'demo'
+    isDemo: u.rol === 'demo',
+    autoCierreMensual: !!u.auto_cierre_mensual
   };
 }
 
@@ -401,10 +402,12 @@ app.get('/api/gastos', authRequired, h(async (req, res) => {
 
 app.post('/api/gastos', authRequired, h(async (req, res) => {
   const d = req.body || {};
+  const fechaVenc = d.fecha_vencimiento || null;
+  const diaVence = fechaVenc ? new Date(fechaVenc + 'T00:00:00Z').getUTCDate() : (parseInt(d.dia_vence) || 1);
   const result = await pool.query(
-    `INSERT INTO gastos (usuario_id, nombre, monto, dia_vence, categoria, cuenta_id, pagado, fecha_pago, recurrente, notas)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-    [req.user.id, d.nombre || '', parseFloat(d.monto) || 0, parseInt(d.dia_vence) || 1, d.categoria || 'Otros',
+    `INSERT INTO gastos (usuario_id, nombre, monto, dia_vence, fecha_vencimiento, categoria, cuenta_id, pagado, fecha_pago, recurrente, notas)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+    [req.user.id, d.nombre || '', parseFloat(d.monto) || 0, diaVence, fechaVenc, d.categoria || 'Otros',
       d.cuenta_id || null, !!d.pagado, d.fecha_pago || null, d.recurrente !== false, d.notas || '']
   );
   res.json({ success: true, id: result.rows[0].id });
@@ -412,13 +415,17 @@ app.post('/api/gastos', authRequired, h(async (req, res) => {
 
 app.put('/api/gastos/:id', authRequired, h(async (req, res) => {
   const d = req.body || {};
+  const fechaVenc = d.fecha_vencimiento || null;
+  const diaVence = fechaVenc ? new Date(fechaVenc + 'T00:00:00Z').getUTCDate()
+    : (d.dia_vence !== undefined ? parseInt(d.dia_vence) || 1 : null);
   const result = await pool.query(
     `UPDATE gastos SET nombre=COALESCE($1,nombre), monto=COALESCE($2,monto), dia_vence=COALESCE($3,dia_vence),
-     categoria=COALESCE($4,categoria), cuenta_id=COALESCE($5,cuenta_id), pagado=COALESCE($6,pagado),
-     fecha_pago=COALESCE($7,fecha_pago), recurrente=COALESCE($8,recurrente), notas=COALESCE($9,notas)
-     WHERE id=$10 AND usuario_id=$11`,
+     fecha_vencimiento=COALESCE($4,fecha_vencimiento),
+     categoria=COALESCE($5,categoria), cuenta_id=COALESCE($6,cuenta_id), pagado=COALESCE($7,pagado),
+     fecha_pago=COALESCE($8,fecha_pago), recurrente=COALESCE($9,recurrente), notas=COALESCE($10,notas)
+     WHERE id=$11 AND usuario_id=$12`,
     [d.nombre, d.monto !== undefined ? parseFloat(d.monto) || 0 : null,
-      d.dia_vence !== undefined ? parseInt(d.dia_vence) || 1 : null, d.categoria, d.cuenta_id, d.pagado,
+      diaVence, fechaVenc, d.categoria, d.cuenta_id, d.pagado,
       d.fecha_pago, d.recurrente, d.notas, req.params.id, req.user.id]
   );
   if (result.rowCount === 0) return res.status(404).json({ success: false, error: 'Gasto no encontrado o no autorizado' });
@@ -459,12 +466,75 @@ app.post('/api/gastos/:id/pagado', authRequired, h(async (req, res) => {
   res.json({ success: true });
 }));
 
-app.post('/api/gastos/resetear-mes', authRequired, h(async (req, res) => {
+async function cerrarMesGastos_(usuarioId) {
   const result = await pool.query(
-    `UPDATE gastos SET pagado=false, fecha_pago=NULL WHERE usuario_id=$1 AND activo=true AND recurrente=true AND pagado=true`,
-    [req.user.id]
+    `UPDATE gastos SET
+       pagado=false, fecha_pago=NULL,
+       fecha_vencimiento = CASE WHEN fecha_vencimiento IS NOT NULL THEN fecha_vencimiento + INTERVAL '1 month' ELSE NULL END,
+       dia_vence = CASE WHEN fecha_vencimiento IS NOT NULL THEN EXTRACT(DAY FROM (fecha_vencimiento + INTERVAL '1 month'))::int ELSE dia_vence END
+     WHERE usuario_id=$1 AND activo=true AND recurrente=true AND pagado=true
+     RETURNING id`,
+    [usuarioId]
   );
-  res.json({ success: true, count: result.rowCount });
+  await pool.query(`UPDATE usuarios SET ultimo_cierre_mes = date_trunc('month', CURRENT_DATE) WHERE id=$1`, [usuarioId]);
+  return result.rowCount;
+}
+
+app.post('/api/gastos/resetear-mes', authRequired, h(async (req, res) => {
+  const count = await cerrarMesGastos_(req.user.id);
+  res.json({ success: true, count });
+}));
+
+// Se llama una vez al cargar la app. Si el usuario activo el cierre
+// automatico y ya cambio de mes desde el ultimo cierre, cierra el mes solo.
+app.post('/api/mes/verificar-cierre', authRequired, h(async (req, res) => {
+  const u = (await pool.query('SELECT auto_cierre_mensual, ultimo_cierre_mes FROM usuarios WHERE id=$1', [req.user.id])).rows[0];
+  const mesActual = new Date().toISOString().slice(0, 7);
+  const ultimoMes = u.ultimo_cierre_mes ? new Date(u.ultimo_cierre_mes).toISOString().slice(0, 7) : null;
+  if (!u.auto_cierre_mensual) return res.json({ success: true, cerrado: false });
+  if (!ultimoMes) {
+    await pool.query(`UPDATE usuarios SET ultimo_cierre_mes = date_trunc('month', CURRENT_DATE) WHERE id=$1`, [req.user.id]);
+    return res.json({ success: true, cerrado: false });
+  }
+  if (ultimoMes !== mesActual) {
+    const count = await cerrarMesGastos_(req.user.id);
+    return res.json({ success: true, cerrado: true, count });
+  }
+  res.json({ success: true, cerrado: false });
+}));
+
+app.post('/api/usuario/auto-cierre', authRequired, h(async (req, res) => {
+  const activo = !!req.body.activo;
+  await pool.query('UPDATE usuarios SET auto_cierre_mensual=$1 WHERE id=$2', [activo, req.user.id]);
+  if (activo) {
+    await pool.query(
+      `UPDATE usuarios SET ultimo_cierre_mes = COALESCE(ultimo_cierre_mes, date_trunc('month', CURRENT_DATE)) WHERE id=$1`,
+      [req.user.id]
+    );
+  }
+  res.json({ success: true });
+}));
+
+// Informe de un mes calendario: resume los movimientos (transferencias) de
+// ese mes. Es un reporte de solo lectura, no una lista editable.
+app.get('/api/mes/informe', authRequired, h(async (req, res) => {
+  const mes = /^\d{4}-\d{2}$/.test(req.query.mes || '') ? req.query.mes : new Date().toISOString().slice(0, 7);
+  const inicio = mes + '-01';
+  const result = await pool.query(
+    `SELECT t.*, cd.nombre AS desde_cuenta, ch.nombre AS hacia_cuenta FROM transferencias t
+     LEFT JOIN cuentas cd ON cd.id = t.desde_cuenta_id
+     LEFT JOIN cuentas ch ON ch.id = t.hacia_cuenta_id
+     WHERE t.usuario_id=$1 AND t.fecha >= $2::date AND t.fecha < ($2::date + INTERVAL '1 month')
+     ORDER BY t.fecha, t.fecha_registro`,
+    [req.user.id, inicio]
+  );
+  let totalIngresos = 0, totalGastos = 0;
+  result.rows.forEach((m) => {
+    const monto = parseFloat(m.monto) || 0;
+    if (m.tipo === 'ingreso') totalIngresos += monto;
+    else if (m.tipo === 'gasto') totalGastos += monto;
+  });
+  res.json({ success: true, mes, movimientos: result.rows, totalIngresos, totalGastos, ahorro: totalIngresos - totalGastos });
 }));
 
 // ============================================================
