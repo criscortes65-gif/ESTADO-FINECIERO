@@ -315,7 +315,12 @@ app.delete('/api/cuentas/:id', authRequired, h(async (req, res) => {
 const FREC_COBROS_MES = { Semanal: 4, Bisemanal: 2, Quincenal: 2, Mensual: 1, Anual: 1 / 12, Unico: 0 };
 
 app.get('/api/ingresos', authRequired, h(async (req, res) => {
-  const result = await pool.query('SELECT * FROM ingresos WHERE usuario_id = $1 AND activo = true ORDER BY fecha_creacion', [req.user.id]);
+  const result = await pool.query(
+    `SELECT i.*, c.nombre AS cuenta_destino FROM ingresos i
+     LEFT JOIN cuentas c ON c.id = i.cuenta_destino_id
+     WHERE i.usuario_id = $1 AND i.activo = true ORDER BY i.fecha_creacion`,
+    [req.user.id]
+  );
   const totalMensual = result.rows.reduce((s, i) => {
     if (!i.activo_recurrente) return s;
     const m = parseFloat(i.monto) || 0;
@@ -379,7 +384,12 @@ app.post('/api/ingresos/:id/recibido', authRequired, h(async (req, res) => {
 //  GASTOS / FACTURAS
 // ============================================================
 app.get('/api/gastos', authRequired, h(async (req, res) => {
-  const result = await pool.query('SELECT * FROM gastos WHERE usuario_id = $1 AND activo = true ORDER BY dia_vence', [req.user.id]);
+  const result = await pool.query(
+    `SELECT g.*, c.nombre AS cuenta FROM gastos g
+     LEFT JOIN cuentas c ON c.id = g.cuenta_id
+     WHERE g.usuario_id = $1 AND g.activo = true ORDER BY g.dia_vence`,
+    [req.user.id]
+  );
   let totalFacturas = 0, totalPagado = 0, totalPendiente = 0;
   result.rows.forEach((g) => {
     const m = parseFloat(g.monto) || 0;
@@ -461,7 +471,12 @@ app.post('/api/gastos/resetear-mes', authRequired, h(async (req, res) => {
 //  GASTOS DEL PERIODO
 // ============================================================
 app.get('/api/gastos-periodo', authRequired, h(async (req, res) => {
-  const result = await pool.query('SELECT * FROM gastos_periodo WHERE usuario_id=$1 AND activo=true ORDER BY fecha DESC', [req.user.id]);
+  const result = await pool.query(
+    `SELECT g.*, c.nombre AS cuenta FROM gastos_periodo g
+     LEFT JOIN cuentas c ON c.id = g.cuenta_id
+     WHERE g.usuario_id=$1 AND g.activo=true ORDER BY g.fecha DESC`,
+    [req.user.id]
+  );
   const total = result.rows.reduce((s, g) => s + (parseFloat(g.monto) || 0), 0);
   res.json({ success: true, gastos: result.rows, total });
 }));
@@ -558,7 +573,10 @@ app.post('/api/presupuestos', authRequired, h(async (req, res) => {
 app.get('/api/transferencias', authRequired, h(async (req, res) => {
   const limit = parseInt(req.query.limit) || 100;
   const result = await pool.query(
-    'SELECT * FROM transferencias WHERE usuario_id=$1 ORDER BY fecha_registro DESC LIMIT $2',
+    `SELECT t.*, cd.nombre AS desde_cuenta, ch.nombre AS hacia_cuenta FROM transferencias t
+     LEFT JOIN cuentas cd ON cd.id = t.desde_cuenta_id
+     LEFT JOIN cuentas ch ON ch.id = t.hacia_cuenta_id
+     WHERE t.usuario_id=$1 ORDER BY t.fecha_registro DESC LIMIT $2`,
     [req.user.id, limit]
   );
   res.json({ success: true, transferencias: result.rows });
