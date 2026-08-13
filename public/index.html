@@ -219,6 +219,8 @@
       <div class="tab" onclick="switchTab('periodo')">Periodo <span class="badge" id="periodo-badge" style="display:none">0</span></div>
       <div class="tab" onclick="switchTab('presupuesto')">Presupuesto</div>
       <div class="tab" onclick="switchTab('transferencias')">Transferencias</div>
+      <div class="tab" onclick="switchTab('calendario')">Calendario</div>
+      <div class="tab" onclick="switchTab('informe')">Informe del Mes</div>
       <div class="tab" id="tab-usuarios" onclick="switchTab('usuarios')" style="display:none">Usuarios</div>
     </nav>
 
@@ -300,7 +302,11 @@
       <section id="sec-gastos" class="section">
         <div class="section-header">
           <h2 class="section-title">Gastos y Facturas</h2>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer">
+              <input type="checkbox" id="auto-cierre-chk" onchange="toggleAutoCierre(this.checked)">
+              Cierre automatico de mes
+            </label>
             <button class="btn bp" onclick="openAddGastoModal()">+ Nuevo Gasto</button>
             <button class="btn bs btn-sm" onclick="resetearFacturas()">Resetear Mes</button>
           </div>
@@ -313,7 +319,7 @@
         <div class="card">
           <div class="tw">
             <table>
-              <thead><tr><th>Gasto / Factura</th><th>Monto</th><th>Dia Vence</th><th>Categoria</th><th>Cuenta</th><th>Estado</th><th></th></tr></thead>
+              <thead><tr><th>Gasto / Factura</th><th>Monto</th><th>Vencimiento</th><th>Categoria</th><th>Cuenta</th><th>Estado</th><th></th></tr></thead>
               <tbody id="gastos-table"><tr><td colspan="7" style="text-align:center;color:var(--text2)">Cargando...</td></tr></tbody>
             </table>
           </div>
@@ -464,6 +470,43 @@
             <table>
               <thead><tr><th>Fecha</th><th>Tipo</th><th>Desde</th><th>Hacia</th><th>Monto</th><th>Descripcion</th></tr></thead>
               <tbody id="transferencias-table"><tr><td colspan="6" style="text-align:center;color:var(--text2)">Cargando...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- CALENDARIO -->
+      <section id="sec-calendario" class="section">
+        <div class="section-header">
+          <h2 class="section-title">Calendario</h2>
+          <div style="display:flex;align-items:center;gap:10px">
+            <button class="btn bs btn-sm" onclick="cambiarMesCalendario(-1)">&larr;</button>
+            <div id="calendario-titulo" style="font-weight:700;min-width:160px;text-align:center"></div>
+            <button class="btn bs btn-sm" onclick="cambiarMesCalendario(1)">&rarr;</button>
+          </div>
+        </div>
+        <div class="card" style="padding:12px">
+          <div id="calendario-grid" class="loading"><div class="spinner"></div>Cargando...</div>
+        </div>
+      </section>
+
+      <!-- INFORME DEL MES -->
+      <section id="sec-informe" class="section">
+        <div class="section-header">
+          <h2 class="section-title">Informe del Mes</h2>
+          <input type="month" id="informe-mes" style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);color:var(--text);font-family:inherit" onchange="loadInforme(this.value)">
+        </div>
+        <p class="landing-hint" style="margin-bottom:16px">Resumen de solo lectura: todo lo que se cobro y se gasto ese mes.</p>
+        <div class="stats">
+          <div class="stat"><div class="stat-label">Total Ingresado</div><div class="stat-value green" id="informe-ingresos">$0.00</div></div>
+          <div class="stat"><div class="stat-label">Total Gastado</div><div class="stat-value gold" id="informe-gastos">$0.00</div></div>
+          <div class="stat"><div class="stat-label">Ahorro del Mes</div><div class="stat-value cyan" id="informe-ahorro">$0.00</div></div>
+        </div>
+        <div class="card">
+          <div class="tw">
+            <table>
+              <thead><tr><th>Fecha</th><th>Tipo</th><th>Desde</th><th>Hacia</th><th>Monto</th><th>Descripcion</th></tr></thead>
+              <tbody id="informe-table"><tr><td colspan="6" style="text-align:center;color:var(--text2)">Cargando...</td></tr></tbody>
             </table>
           </div>
         </div>
@@ -630,7 +673,7 @@
 
   // Muestra la app ya autenticada (real o demo) y oculta la pantalla de inicio.
   function aplicarPerfil(profile){
-    USER={email:profile.email,nombre:profile.nombre,rol:profile.rol,isAdmin:profile.isAdmin,isDemo:!!profile.isDemo};
+    USER={email:profile.email,nombre:profile.nombre,rol:profile.rol,isAdmin:profile.isAdmin,isDemo:!!profile.isDemo,autoCierreMensual:!!profile.autoCierreMensual};
     document.getElementById('landing').style.display='none';
     document.getElementById('app-root').style.display='';
     document.getElementById('user-display-name').textContent=USER.nombre;
@@ -641,7 +684,19 @@
     document.getElementById('demo-reset-btn').style.display=USER.isDemo?'inline-flex':'none';
     document.getElementById('demo-exit-btn').style.display=USER.isDemo?'inline-flex':'none';
     document.getElementById('logout-btn').style.display=USER.isDemo?'none':'inline-flex';
+    var chk=document.getElementById('auto-cierre-chk');
+    if(chk)chk.checked=USER.autoCierreMensual;
     loadCategorias();refreshDashboard();
+    api('POST','/api/mes/verificar-cierre').then(function(r){
+      if(r&&r.success&&r.cerrado){toast('📅 Se cerro el mes anterior automaticamente ('+r.count+' facturas recurrentes reiniciadas)','ok');loadGastos();refreshDashboard();}
+    });
+  }
+  function toggleAutoCierre(activo){
+    USER.autoCierreMensual=activo;
+    api('POST','/api/usuario/auto-cierre',{activo:activo}).then(function(r){
+      if(r&&r.success)toast(activo?'Cierre automatico activado':'Cierre automatico desactivado','ok');
+      else toast('Error: '+(r&&r.error),'err');
+    });
   }
 
   function loadCategorias(){api('GET','/api/categorias').then(function(r){if(r.success)CATEGORIAS=r.categorias||[];});}
@@ -661,6 +716,8 @@
       case 'periodo':loadGastosPeriodo();break;
       case 'presupuesto':loadPresupuesto();break;
       case 'transferencias':loadTransferencias();break;
+      case 'calendario':loadCalendario();break;
+      case 'informe':loadInforme();break;
       case 'usuarios':loadUsuarios();break;
     }
   }
@@ -854,7 +911,7 @@
       return '<tr'+(urgente?' style="background:rgba(239,68,68,.1)"':'')+'>'+
         '<td><span style="margin-right:8px">'+icon+'</span><strong>'+esc(g.nombre)+'</strong>'+(g.notas?'<br><small style="color:var(--text2)">'+esc(g.notas)+'</small>':'')+'</td>'+
         '<td style="color:var(--gold);font-weight:600">'+formatMoney(g.monto)+'</td>'+
-        '<td>Dia '+(g.dia_vence||1)+'</td><td>'+esc(g.categoria||'Otros')+'</td><td>'+esc(g.cuenta||'-')+'</td>'+
+        '<td>'+(g.fecha_vencimiento?formatDate(g.fecha_vencimiento):('Dia '+(g.dia_vence||1)))+'</td><td>'+esc(g.categoria||'Otros')+'</td><td>'+esc(g.cuenta||'-')+'</td>'+
         '<td><span class="status '+(g.pagado?'pagado':(urgente?'urgente':'pendiente'))+'">'+(g.pagado?'Pagado':(urgente?'Urgente':'Pendiente'))+'</span></td>'+
         '<td style="display:flex;gap:6px;flex-wrap:wrap">'+
           (g.pagado?'<button class="btn btn-sm bo" onclick="toggleGastoPagado(\''+g.id+'\',false)">Desmarcar</button>':'<button class="btn btn-sm bg" onclick="toggleGastoPagado(\''+g.id+'\',true)">Pagar</button>')+
@@ -863,31 +920,40 @@
         '</td></tr>';
     }).join('');
   }
-  function openAddGastoModal(){
+  function fechaHoyStr(){return new Date().toISOString().split('T')[0];}
+  function gastoFechaValue(g){
+    if(g&&g.fecha_vencimiento)return String(g.fecha_vencimiento).split('T')[0];
+    var d=new Date();d.setDate(g&&g.dia_vence?g.dia_vence:1);
+    return d.toISOString().split('T')[0];
+  }
+  function openAddGastoModal(fechaPrefill){
     var cOpts='<option value="">Seleccionar cuenta...</option>'+CUENTAS.map(function(c){return '<option value="'+c.id+'" data-nombre="'+esc(c.nombre)+'">'+(c.icono||'🏦')+' '+esc(c.nombre)+'</option>';}).join('');
     var catOpts=CATEGORIAS.map(function(cat){return '<option value="'+cat+'">'+(ICONOS_GASTO[cat]||'📦')+' '+cat+'</option>';}).join('');
-    var html='<div class="form-grid"><div class="fg" style="grid-column:span 2"><label>Nombre del Gasto</label><input type="text" id="gasto-nombre" placeholder="Ej: Renta"></div><div class="fg"><label>Monto ($)</label><input type="number" id="gasto-monto" value="0" step="0.01" min="0"></div><div class="fg"><label>Dia Vencimiento</label><input type="number" id="gasto-dia" value="1" min="1" max="31"></div><div class="fg"><label>Categoria</label><select id="gasto-categoria">'+catOpts+'</select></div><div class="fg"><label>Cuenta de Pago</label><select id="gasto-cuenta">'+cOpts+'</select></div><div class="fg"><label></label><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="gasto-recurrente" checked> Gasto Recurrente</label></div><div class="fg" style="grid-column:span 2"><label>Notas</label><textarea id="gasto-notas" rows="2" style="width:100%;resize:vertical"></textarea></div></div>';
+    var fecha=fechaPrefill||fechaHoyStr();
+    var html='<div class="form-grid"><div class="fg" style="grid-column:span 2"><label>Nombre del Gasto</label><input type="text" id="gasto-nombre" placeholder="Ej: Renta"></div><div class="fg"><label>Monto ($)</label><input type="number" id="gasto-monto" value="0" step="0.01" min="0"></div><div class="fg"><label>Fecha de Vencimiento</label><input type="date" id="gasto-fecha" value="'+fecha+'"></div><div class="fg"><label>Categoria</label><select id="gasto-categoria">'+catOpts+'</select></div><div class="fg"><label>Cuenta de Pago</label><select id="gasto-cuenta">'+cOpts+'</select></div><div class="fg"><label></label><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="gasto-recurrente" checked> Gasto Recurrente</label></div><div class="fg" style="grid-column:span 2"><label>Notas</label><textarea id="gasto-notas" rows="2" style="width:100%;resize:vertical"></textarea></div></div><p class="landing-hint" style="margin-top:8px">Si marcas "Gasto Recurrente", al cerrar el mes esta fecha avanza sola al mismo dia del siguiente mes.</p>';
     openModal('Nuevo Gasto',html,'<button class="btn bs" onclick="closeModal()">Cancelar</button><button class="btn bp" onclick="saveGasto()">Guardar</button>');
   }
   function saveGasto(){
     var cs=document.getElementById('gasto-cuenta'),co=cs.options[cs.selectedIndex];
-    var data={nombre:document.getElementById('gasto-nombre').value,monto:parseFloat(document.getElementById('gasto-monto').value)||0,dia_vence:parseInt(document.getElementById('gasto-dia').value)||1,categoria:document.getElementById('gasto-categoria').value,cuenta_id:cs.value,cuenta:co&&co.dataset.nombre?co.dataset.nombre:'',recurrente:document.getElementById('gasto-recurrente').checked,pagado:false,notas:document.getElementById('gasto-notas').value};
+    var fecha=document.getElementById('gasto-fecha').value||fechaHoyStr();
+    var data={nombre:document.getElementById('gasto-nombre').value,monto:parseFloat(document.getElementById('gasto-monto').value)||0,fecha_vencimiento:fecha,categoria:document.getElementById('gasto-categoria').value,cuenta_id:cs.value,cuenta:co&&co.dataset.nombre?co.dataset.nombre:'',recurrente:document.getElementById('gasto-recurrente').checked,pagado:false,notas:document.getElementById('gasto-notas').value};
     if(!data.nombre){toast('Ingrese el nombre','err');return;}
     toast('Guardando...','ok');
-    api('POST','/api/gastos',data).then(function(r){if(r.success){closeModal();toast('Gasto creado','ok');loadGastos();refreshDashboard();}else{toast('Error: '+r.error,'err');}});
+    api('POST','/api/gastos',data).then(function(r){if(r.success){closeModal();toast('Gasto creado','ok');loadGastos();refreshDashboard();if(typeof renderCalendario==='function')renderCalendario();}else{toast('Error: '+r.error,'err');}});
   }
   function openEditGastoModal(id){
     var g=GASTOS.find(function(x){return x.id==id;});if(!g)return;
     var cOpts='<option value="">Seleccionar cuenta...</option>'+CUENTAS.map(function(c){return '<option value="'+c.id+'" data-nombre="'+esc(c.nombre)+'"'+(c.id===g.cuenta_id?' selected':'')+'>  '+(c.icono||'🏦')+' '+esc(c.nombre)+'</option>';}).join('');
     var catOpts=CATEGORIAS.map(function(cat){return '<option value="'+cat+'"'+(g.categoria===cat?' selected':'')+'>  '+(ICONOS_GASTO[cat]||'📦')+' '+cat+'</option>';}).join('');
-    var html='<div class="form-grid"><div class="fg" style="grid-column:span 2"><label>Nombre del Gasto</label><input type="text" id="gasto-nombre" value="'+esc(g.nombre)+'"></div><div class="fg"><label>Monto ($)</label><input type="number" id="gasto-monto" value="'+(g.monto||0)+'" step="0.01" min="0"></div><div class="fg"><label>Dia Vencimiento</label><input type="number" id="gasto-dia" value="'+(g.dia_vence||1)+'" min="1" max="31"></div><div class="fg"><label>Categoria</label><select id="gasto-categoria">'+catOpts+'</select></div><div class="fg"><label>Cuenta de Pago</label><select id="gasto-cuenta">'+cOpts+'</select></div><div class="fg"><label></label><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="gasto-recurrente"'+(g.recurrente?' checked':'')+'>  Gasto Recurrente</label></div><div class="fg" style="grid-column:span 2"><label>Notas</label><textarea id="gasto-notas" rows="2" style="width:100%;resize:vertical">'+esc(g.notas||'')+'</textarea></div></div>';
+    var html='<div class="form-grid"><div class="fg" style="grid-column:span 2"><label>Nombre del Gasto</label><input type="text" id="gasto-nombre" value="'+esc(g.nombre)+'"></div><div class="fg"><label>Monto ($)</label><input type="number" id="gasto-monto" value="'+(g.monto||0)+'" step="0.01" min="0"></div><div class="fg"><label>Fecha de Vencimiento</label><input type="date" id="gasto-fecha" value="'+gastoFechaValue(g)+'"></div><div class="fg"><label>Categoria</label><select id="gasto-categoria">'+catOpts+'</select></div><div class="fg"><label>Cuenta de Pago</label><select id="gasto-cuenta">'+cOpts+'</select></div><div class="fg"><label></label><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="gasto-recurrente"'+(g.recurrente?' checked':'')+'>  Gasto Recurrente</label></div><div class="fg" style="grid-column:span 2"><label>Notas</label><textarea id="gasto-notas" rows="2" style="width:100%;resize:vertical">'+esc(g.notas||'')+'</textarea></div></div>';
     openModal('Editar Gasto',html,'<button class="btn bs" onclick="closeModal()">Cancelar</button><button class="btn bp" onclick="updateGastoSubmit(\''+id+'\')">Guardar</button>');
   }
   function updateGastoSubmit(id){
     var cs=document.getElementById('gasto-cuenta'),co=cs.options[cs.selectedIndex];
-    var data={nombre:document.getElementById('gasto-nombre').value,monto:parseFloat(document.getElementById('gasto-monto').value)||0,dia_vence:parseInt(document.getElementById('gasto-dia').value)||1,categoria:document.getElementById('gasto-categoria').value,cuenta_id:cs.value,cuenta:co&&co.dataset.nombre?co.dataset.nombre:'',recurrente:document.getElementById('gasto-recurrente').checked,notas:document.getElementById('gasto-notas').value};
+    var fecha=document.getElementById('gasto-fecha').value||fechaHoyStr();
+    var data={nombre:document.getElementById('gasto-nombre').value,monto:parseFloat(document.getElementById('gasto-monto').value)||0,fecha_vencimiento:fecha,categoria:document.getElementById('gasto-categoria').value,cuenta_id:cs.value,cuenta:co&&co.dataset.nombre?co.dataset.nombre:'',recurrente:document.getElementById('gasto-recurrente').checked,notas:document.getElementById('gasto-notas').value};
     toast('Guardando...','ok');
-    api('PUT','/api/gastos/'+id,data).then(function(r){if(r.success){closeModal();toast('Gasto actualizado','ok');loadGastos();refreshDashboard();}else{toast('Error: '+r.error,'err');}});
+    api('PUT','/api/gastos/'+id,data).then(function(r){if(r.success){closeModal();toast('Gasto actualizado','ok');loadGastos();refreshDashboard();if(typeof renderCalendario==='function')renderCalendario();}else{toast('Error: '+r.error,'err');}});
   }
   function toggleGastoPagado(id,pagado){
     toast(pagado?'Marcando como pagado...':'Desmarcando...','ok');
@@ -1014,6 +1080,110 @@
       var tl=t.tipo==='ingreso'?'Ingreso':t.tipo==='gasto'?'Gasto':'Transferencia';
       return '<tr><td>'+formatDate(t.fecha)+'</td><td><span style="color:'+tc+'">'+ti+' '+tl+'</span></td><td>'+esc(t.desde_cuenta||'-')+'</td><td>'+esc(t.hacia_cuenta||'-')+'</td><td style="font-weight:600;color:'+tc+'">'+(t.tipo==='gasto'?'-':'+')+formatMoney(t.monto)+'</td><td style="color:var(--text2)">'+esc(t.descripcion||t.categoria||'-')+'</td></tr>';
     }).join('');
+  }
+
+  // ============================================================
+  // INFORME DEL MES (solo lectura)
+  // ============================================================
+  function loadInforme(mes){
+    mes=mes||new Date().toISOString().slice(0,7);
+    var input=document.getElementById('informe-mes');
+    if(input)input.value=mes;
+    api('GET','/api/mes/informe?mes='+mes).then(function(r){
+      if(r.success)renderInforme(r);
+      else toast('Error: '+r.error,'err');
+    });
+  }
+  function renderInforme(r){
+    document.getElementById('informe-ingresos').textContent=formatMoney(r.totalIngresos);
+    document.getElementById('informe-gastos').textContent=formatMoney(r.totalGastos);
+    var ahorroEl=document.getElementById('informe-ahorro');
+    ahorroEl.textContent=formatMoney(r.ahorro);
+    ahorroEl.className='stat-value '+(r.ahorro>=0?'cyan':'red');
+    var tbody=document.getElementById('informe-table');
+    if(!r.movimientos.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text2)">No hay movimientos este mes</td></tr>';return;}
+    tbody.innerHTML=r.movimientos.map(function(t){
+      var tc=t.tipo==='ingreso'?'var(--green)':t.tipo==='gasto'?'var(--red)':'var(--cyan)';
+      var ti=t.tipo==='ingreso'?'⬆️':t.tipo==='gasto'?'⬇️':'🔄';
+      var tl=t.tipo==='ingreso'?'Ingreso':t.tipo==='gasto'?'Gasto':'Transferencia';
+      return '<tr><td>'+formatDate(t.fecha)+'</td><td><span style="color:'+tc+'">'+ti+' '+tl+'</span></td><td>'+esc(t.desde_cuenta||'-')+'</td><td>'+esc(t.hacia_cuenta||'-')+'</td><td style="font-weight:600;color:'+tc+'">'+(t.tipo==='gasto'?'-':'+')+formatMoney(t.monto)+'</td><td style="color:var(--text2)">'+esc(t.descripcion||t.categoria||'-')+'</td></tr>';
+    }).join('');
+  }
+
+  // ============================================================
+  // CALENDARIO
+  // ============================================================
+  var CAL_MES=new Date().getMonth(),CAL_ANIO=new Date().getFullYear();
+  var MESES_NOMBRE=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  function cambiarMesCalendario(delta){
+    CAL_MES+=delta;
+    if(CAL_MES<0){CAL_MES=11;CAL_ANIO--;}
+    if(CAL_MES>11){CAL_MES=0;CAL_ANIO++;}
+    renderCalendario();
+  }
+  function loadCalendario(){
+    api('GET','/api/gastos').then(function(r){if(r.success)GASTOS=r.gastos||[];
+      api('GET','/api/ingresos').then(function(r2){if(r2.success)INGRESOS=r2.ingresos||[];
+        renderCalendario();
+      });
+    });
+  }
+  function fechaLocalYMD(y,m,d){
+    return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+  }
+  function renderCalendario(){
+    var titulo=document.getElementById('calendario-titulo');
+    if(titulo)titulo.textContent=MESES_NOMBRE[CAL_MES]+' '+CAL_ANIO;
+    var primerDia=new Date(CAL_ANIO,CAL_MES,1).getDay();
+    var diasEnMes=new Date(CAL_ANIO,CAL_MES+1,0).getDate();
+    var hoy=new Date();
+    var esMesActual=hoy.getFullYear()===CAL_ANIO&&hoy.getMonth()===CAL_MES;
+
+    var gastosPorDia={};
+    (GASTOS||[]).forEach(function(g){
+      if(!g.fecha_vencimiento)return;
+      var fv=new Date(g.fecha_vencimiento);
+      var mesGasto=fv.getUTCMonth(),anioGasto=fv.getUTCFullYear(),diaGasto=fv.getUTCDate();
+      var coincide=(mesGasto===CAL_MES&&anioGasto===CAL_ANIO)||(g.recurrente&&diaGasto<=diasEnMes);
+      if(!coincide)return;
+      var dia=(mesGasto===CAL_MES&&anioGasto===CAL_ANIO)?diaGasto:Math.min(diaGasto,diasEnMes);
+      (gastosPorDia[dia]=gastosPorDia[dia]||[]).push(g);
+    });
+    var ingresosPorDia={};
+    (INGRESOS||[]).forEach(function(i){
+      if(!i.activo_recurrente||!i.dia_cobro)return;
+      var dia=Math.min(parseInt(i.dia_cobro)||1,diasEnMes);
+      (ingresosPorDia[dia]=ingresosPorDia[dia]||[]).push(i);
+    });
+
+    var celdas=[];
+    for(var i=0;i<primerDia;i++)celdas.push('<div></div>');
+    for(var dia=1;dia<=diasEnMes;dia++){
+      var esHoy=esMesActual&&hoy.getDate()===dia;
+      var fechaStr=fechaLocalYMD(CAL_ANIO,CAL_MES,dia);
+      var marcas='';
+      (gastosPorDia[dia]||[]).forEach(function(g){
+        marcas+='<div onclick="event.stopPropagation();openEditGastoModal(\''+g.id+'\')" style="background:rgba(239,68,68,.15);color:var(--red);border-radius:5px;padding:2px 5px;margin-top:3px;font-size:10px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(g.nombre)+' - '+formatMoney(g.monto)+'">⬇️ '+esc(g.nombre)+'</div>';
+      });
+      (ingresosPorDia[dia]||[]).forEach(function(ing){
+        marcas+='<div onclick="event.stopPropagation();openEditIngresoModal(\''+ing.id+'\')" style="background:rgba(16,185,129,.15);color:var(--green);border-radius:5px;padding:2px 5px;margin-top:3px;font-size:10px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(ing.nombre)+' - '+formatMoney(ing.monto)+'">⬆️ '+esc(ing.nombre)+'</div>';
+      });
+      celdas.push('<div onclick="menuAgregarCalendario(\''+fechaStr+'\')" style="min-height:86px;border:1px solid var(--border);border-radius:8px;padding:6px;cursor:pointer;transition:background .1s'+(esHoy?';border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)':'')+'" onmouseover="this.style.background=\'var(--bg3)\'" onmouseout="this.style.background=\'\'">'+
+        '<div style="font-size:11px;font-weight:700;color:'+(esHoy?'var(--cyan)':'var(--text2)')+'">'+dia+'</div>'+marcas+'</div>');
+    }
+    var grid=document.getElementById('calendario-grid');
+    var nombresDias=['Dom','Lun','Mar','Mie','Jue','Vie','Sab'];
+    grid.innerHTML='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px">'+
+      nombresDias.map(function(n){return '<div style="text-align:center;font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase">'+n+'</div>';}).join('')+
+      '</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">'+celdas.join('')+'</div>';
+  }
+  function menuAgregarCalendario(fechaStr){
+    openModal('Agregar en '+formatDate(fechaStr),
+      '<p style="margin-bottom:16px;color:var(--text2);font-size:13px">¿Que quieres agregar en esta fecha?</p>',
+      '<button class="btn bs" onclick="closeModal()">Cancelar</button>'+
+      '<button class="btn bg" onclick="closeModal();openAddIngresoModal();document.getElementById(\'ingreso-dia\')&&(document.getElementById(\'ingreso-dia\').value=new Date(\''+fechaStr+'T00:00:00\').getDate())">+ Ingreso</button>'+
+      '<button class="btn br" onclick="closeModal();openAddGastoModal(\''+fechaStr+'\')">+ Gasto</button>'
+    );
   }
   function openTransferenciaModal(){
     if(CUENTAS.length<2){toast('Necesita al menos 2 cuentas','err');return;}
